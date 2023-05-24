@@ -1,0 +1,169 @@
+id,Path,Origin,Origin_ID,Destination,Destination_ID,Dist_km
+1,Atexcac - Xaltepetlapan,Atexcac,129,Xaltepetlapan,131,5.239
+2,Atexcac - Tlayacaque,Atexcac,129,Tlayacaque,130,5.16
+3,Atexcac - Tlachichilco,Atexcac,129,Tlachichilco,128,3.632
+4,Tlachichilco - Acxotlan Tecpan,Tlachichilco,128,Acxotlan Tecpan,112,9.2
+5,Xaltepetlapan - Acxotlan Tecpan,Xaltepetlapan,131,Acxotlan Tecpan,112,3.705
+6,Xaltepetlapan - Ahuatepec,Xaltepetlapan,131,Ahuatepec,133,4.818
+7,Ciudad Huexotzinco - Ahuatepec,Ciudad Huexotzinco,101,Ahuatepec,133,3.517
+8,Ahuatepec - Zacatepec,Ahuatepec,133,Zacatepec,127,4.393
+9,Ciudad Huexotzinco - Zacatepec,Ciudad Huexotzinco,101,Zacatepec,127,5.165
+10,Ciudad Huexotzinco - Atenco South,Ciudad Huexotzinco,101,Atenco South,109,3.765
+11,Atenco South - Atenco North,Atenco South,109,Atenco North,124,2.667
+12,Ciudad Huexotzinco - Mextla,Ciudad Huexotzinco,101,Mextla,110,2.829
+13,Ciudad Huexotzinco - Atenco North,Ciudad Huexotzinco,101,Atenco North,124,4.704
+14,Zacatepec - Tepalcatepec,Zacatepec,127,Tepalcatepec,132,7.272
+14,Ahuatepec - Tepalcatepec,Ahuatepec,133,Tepalcatepec,132,4.266
+15,Acxotlan Tecpan - Ciudad Huexotzinco,Acxotlan Tecpan,112,Ciudad Huexotzinco,101,3.624
+16,Acxotlan Tecpan - Zacapechpan,Acxotlan Tecpan,112,Zacapechpan,106,1.609
+16,Ciudad Huexotzinco - Zacapechpan,Ciudad Huexotzinco,101,Zacapechpan,106,3.259
+17,Tlachichilco - Tlayacaque,Tlachichilco,128,Tlayacaque,130,4.003
+18,Nepopohualco - Tlayacaque,Nepopohualco,134,Tlayacaque,130,7.774
+19,Nepopohualco - Almoyahuacan,Nepopohualco,134,Almoyahuacan,103,3.025
+20,Nepopohualco - Acxotlan Tecpan,Nepopohualco,134,Acxotlan Tecpan,112,3.9
+21,Nepopohualco - Zacapechpan,Nepopohualco,134,Zacapechpan,106,5.339
+22,Tlayacaque - Ocotepec,Tlayacaque,130,Ocotepec,102,6.953
+23,Ocotepec - Almoyahuacan,Ocotepec,102,Almoyahuacan,103,1.697
+24,Almoyahuacan - Acxotlan Tecpan,Almoyahuacan,103,Acxotlan Tecpan,112,6.689
+25,Ocotepec - Tepetzinco,Ocotepec,102,Tepetzinco,104,2.923
+26,Almoyahuacan - Zacapechpan,Almoyahuacan,103,Zacapechpan,106,7.028
+28,Ocotepec - Tepoliuhcan,Ocotepec,102,Tepoliuhcan,114,5.262
+27,Tlayacaque - Tepulequique,Tlayacaque,130,Tepulequique,111,4.893
+30,Tepetzinco - Tepoliuhcan,Tepetzinco,104,Tepoliuhcan,114,3.485
+31,Tepetzinco - Zacapechpan,Tepetzinco,104,Zacapechpan,106,3.384
+32,Ocotepec - Tlatenco,Ocotepec,102,Tlatenco,115,2.916
+32,Tocuillan - Zacapechpan,Tocuillan,108,Zacapechpan,106,1.563
+33,Ciudad Huexotzinco - Xopanac Inn,Ciudad Huexotzinco,101,Xopanac Inn,107,2.793
+34,Ciudad Huexotzinco - Tocuillan,Ciudad Huexotzinco,101,Tocuillan,108,4.13
+35,Tocuillan - Xopanac Inn,Tocuillan,108,Xopanac Inn,107,1.759
+36,Ciudad Huexotzinco - Coyotzinco,Ciudad Huexotzinco,101,Coyotzinco,105,5.563
+36,Xopanac Inn - Calpultitlan,Xopanac Inn,107,Calpultitlan,123,1.809
+37,Tocuillan - Coyotzinco,Tocuillan,108,Coyotzinco,105,2.123
+38,Coyotzinco - Tepoliuhcan,Coyotzinco,105,Tepoliuhcan,114,2.307
+39,Tocuillan - Tepetzinco,Tocuillan,108,Tepetzinco,104,4.71
+41,Tepetzinco - Coyotzinco,Tepetzinco,104,Coyotzinco,105,5.269
+42,Tocuillan - Tepoliuhcan,Tocuillan,108,Tepoliuhcan,114,4.458
+43,Ciudad Huexotzinco - Tepoliuhcan,Ciudad Huexotzinco,101,Tepoliuhcan,114,8.03
+44,Chiauhtzinco Plains - Tepoliuhcan,Chiauhtzinco Plains,122,Tepoliuhcan,114,1.827
+45,Coyotzinco - Calpultitlan,Coyotzinco,105,Calpultitlan,123,3.238
+46,Calpultitlan - Xalmimilolco,Calpultitlan,123,Xalmimilolco,125,4.966
+47,Xopanac Inn - Xalmimilolco,Xopanac Inn,107,Xalmimilolco,125,6.47
+48,Mextla - Xopanac Inn,Mextla,110,Xopanac Inn,107,3.011
+49,Zacatepec - Atenco South,Zacatepec,127,Atenco South,109,3.166
+50,Mextla - Atenco North,Mextla,110,Atenco North,124,2.844
+51,Mextla - Atenco South,Mextla,110,Atenco South,109,3.665
+52,Atenco South - Ahuatepec,Atenco South,109,Ahuatepec,133,7.058
+53,Ahuatepec - Acxotlan Tecpan,Ahuatepec,133,Acxotlan Tecpan,112,5.568
+55,Xaltepetlapan - Ciudad Huexotzinco,Xaltepetlapan,131,Ciudad Huexotzinco,101,5.787
+56,Atenco North - Xalmimilolco,Atenco North,124,Xalmimilolco,125,6.815
+57,Xalmimilolco - Atlicholoayan,Xalmimilolco,125,Atlicholoayan,126,4.174
+59,Ciudad Huexotzinco - Xalmimilolco,Ciudad Huexotzinco,101,Xalmimilolco,125,7.009
+60,Ciudad Huexotzinco - Tepalcatepec,Ciudad Huexotzinco,101,Tepalcatepec,132,7.081
+61,Ciudad Huexotzinco - Almoyahuacan,Ciudad Huexotzinco,101,Almoyahuacan,103,10.013
+62,Coyotzinco - Chiauhtzinco Plains,Coyotzinco,105,Chiauhtzinco Plains,122,3.255
+63,Coyotzinco - Mendocinas Tetla,Coyotzinco,105,Mendocinas Tetla,119,6.66
+64,Chiauhtzinco Plains - Mendocinas Tetla,Chiauhtzinco Plains,122,Mendocinas Tetla,119,4.082
+65,Tlatenco - Tepoliuhcan,Tlatenco,115,Tepoliuhcan,114,4.879
+66,Calpultitlan - Atlicholoayan,Calpultitlan,123,Atlicholoayan,126,2.312
+67,Coyotzinco - Atlicholoayan,Coyotzinco,105,Atlicholoayan,126,3.819
+68,Chiauhtzinco Plains - Coxtocan,Chiauhtzinco Plains,122,Coxtocan,118,3.24
+69,Tepulequique - Tlatenco,Tepulequique,111,Tlatenco,115,4.251
+70,Tepulequique - Zecalacoayan Aytec,Tepulequique,111,Zecalacoayan Aytec,113,6.305
+71,Tepulequique - Atzompan,Tepulequique,111,Atzompan,120,5.267
+72,Tlatenco - Zecalacoayan Aytec,Tlatenco,115,Zecalacoayan Aytec,113,5.441
+73,Tepoliuhcan - Zecalacoayan Aytec,Tepoliuhcan,114,Zecalacoayan Aytec,113,3.912
+74,Zecalacoayan Aytec - Chiauhtzinco Plains,Zecalacoayan Aytec,113,Chiauhtzinco Plains,122,3.846
+75,Zecalacoayan Aytec - Atzompan,Zecalacoayan Aytec,113,Atzompan,120,4.668
+76,Atzompan - Chiauhtzinco Plains,Atzompan,120,Chiauhtzinco Plains,122,6.726
+77,Atzompan - Mendocinas Tetla,Atzompan,120,Mendocinas Tetla,119,4.888
+78,Zecalacoayan Aytec - Mendocinas Tetla,Zecalacoayan Aytec,113,Mendocinas Tetla,119,4.439
+79,Coyotzinco - San Salvador,Coyotzinco,105,San Salvador,203,11.665
+80,Teotlaltzinco - Quetzallan,Teotlaltzinco,209,Quetzallan,213,2.983
+81,Teotlaltzinco - Mendocinas Tetla,Teotlaltzinco,209,Mendocinas Tetla,119,1.279
+82,Teotlaltzinco - San Salvador,Teotlaltzinco,209,San Salvador,203,5.011
+83,Teotlaltzinco - Malinaltepec,Teotlaltzinco,209,Malinaltepec,121,5.478
+84,Malinaltepec - Hueyacatitla,Malinaltepec,121,Hueyacatitla,210,5.229
+85,Hueyacatitla - San Salvador,Hueyacatitla,210,San Salvador,203,2.972
+86,San Salvador - Aztatoacan,San Salvador,203,Aztatoacan,211,3.247
+87,Quetzallan - San Salvador,Quetzallan,213,San Salvador,203,5.032
+88,Quetzallan - Mendocinas Tetla,Quetzallan,213,Mendocinas Tetla,119,3.593
+89,Mendocinas Tetla - Tozcoque,Mendocinas Tetla,119,Tozcoque,214,5.952
+89,Quetzallan - Atlacintla,Quetzallan,213,Atlacintla,212,1.637
+90,Quetzallan - Aztatoacan,Quetzallan,213,Aztatoacan,211,2.031
+91,Atlacintla - Aztatoacan,Atlacintla,212,Aztatoacan,211,1.61
+92,Hueyatzacoalco - Atlacintla,Hueyatzacoalco,215,Atlacintla,212,3.198
+93,Tozcoque - Atlacintla,Tozcoque,214,Atlacintla,212,2.882
+94,Quetzallan - Tozcoque,Quetzallan,213,Tozcoque,214,3.894
+95,Hueyatzacoalco - Quetzallan,Hueyatzacoalco,215,Quetzallan,213,4.471
+96,Aztatoacan - Hueyatzacoalco,Aztatoacan,211,Hueyatzacoalco,215,3.754
+96,Atzompan - Malinaltepec,Atzompan,120,Malinaltepec,121,7.819
+97,Atzompan - Teotlaltzinco,Atzompan,120,Teotlaltzinco,209,5.98
+98,Hueyacatitla - Tlalnahuac,Hueyacatitla,210,Tlalnahuac,202,5.441
+99,San Salvador - Coatlichan,San Salvador,203,Coatlichan,201,3.869
+100,Tlalnahuac - Coatlichan,Tlalnahuac,202,Coatlichan,201,2.674
+101,Coatlichan - Tenexcalco,Coatlichan,201,Tenexcalco,204,4.253
+102,San Salvador - Tenexcalco,San Salvador,203,Tenexcalco,204,6.874
+103,San Salvador - Tzayanalquilocan,San Salvador,203,Tzayanalquilocan,217,7.648
+104,Xalmimilolco - Moyotzingo,Xalmimilolco,125,Moyotzingo,117,4.601
+105,Coxtocan - Moyotzingo,Coxtocan,118,Moyotzingo,117,4.533
+106,Atlacintla - Coxtocan,Atlacintla,212,Coxtocan,118,4.851
+107,Coxtocan - Tozcoque,Coxtocan,118,Tozcoque,214,2.758
+108,Atlicholoayan - Moyotzingo,Atlicholoayan,126,Moyotzingo,117,4.553
+109,Atlicholoayan - Coxtocan,Atlicholoayan,126,Coxtocan,118,4.484
+110,Coyotzinco - Coxtocan,Coyotzinco,105,Coxtocan,118,4.41
+111,Moyotzingo - Tozcoque,Moyotzingo,117,Tozcoque,214,5.151
+112,Moyotzingo - Temaxcalac,Moyotzingo,117,Temaxcalac,116,3.491
+113,Tozcoque - Temaxcalac,Tozcoque,214,Temaxcalac,116,4.212
+114,Hueyatzacoalco - Moyotzingo,Hueyatzacoalco,215,Moyotzingo,117,7.399
+115,Temaxcalac - Hueyatzacoalco,Temaxcalac,116,Hueyatzacoalco,215,4.436
+116,Temaxcalac - Tepatlaxco,Temaxcalac,116,Tepatlaxco,216,5.682
+117,Tzayanalquilocan - Hueyatzacoalco,Tzayanalquilocan,217,Hueyatzacoalco,215,4.368
+118,Tzayanalquilocan - Aztatoacan,Tzayanalquilocan,217,Aztatoacan,211,5.208
+119,Tzayanalquilocan - Tepatlaxco,Tzayanalquilocan,217,Tepatlaxco,216,2.998
+120,Tepatlaxco - Aztatoacan,Tepatlaxco,216,Aztatoacan,211,6.259
+121,Tepatlaxco - Atlacintla,Tepatlaxco,216,Atlacintla,212,5.957
+122,Tepatlaxco - Tlallancallecan,Tepatlaxco,216,Tlallancallecan,205,5.875
+123,Tepatlaxco - Tenexcalco,Tepatlaxco,216,Tenexcalco,204,6.97
+124,Tenexcalco - Tzayanalquilocan,Tenexcalco,204,Tzayanalquilocan,217,3.605
+125,Tzayanalquilocan - Tlallancallecan,Tzayanalquilocan,217,Tlallancallecan,205,2.984
+126,San Salvador - Tlallancallecan,San Salvador,203,Tlallancallecan,205,7.435
+127,Tenexcalco - Tlallancallecan,Tenexcalco,204,Tlallancallecan,205,2.502
+128,Apapaztlan - Amaxac,Apapaztlan,206,Amaxac,207,8.772
+129,Tenexcalco - Amaxac,Tenexcalco,204,Amaxac,207,7.298
+130,Tlallancallecan - Apapaztlan,Tlallancallecan,205,Apapaztlan,206,11.907
+131,Tlallancallecan - Amaxac,Tlallancallecan,205,Amaxac,207,6.331
+132,Tlallancallecan - Autliztacan,Tlallancallecan,205,Autliztacan,208,11.21
+133,Amaxac - Autliztacan,Amaxac,207,Autliztacan,208,6.575
+134,Apapaztlan - Autliztacan,Apapaztlan,206,Autliztacan,208,12.127
+135,Tlalnahuac - Apapaztlan,Tlalnahuac,202,Apapaztlan,206,9.893
+136,Tlalnahuac - Amaxac,Tlalnahuac,202,Amaxac,207,13.98
+137,Coatlichan - Amaxac,Coatlichan,201,Amaxac,207,11.462
+138,Coatlichan - Apapaztlan,Coatlichan,201,Apapaztlan,206,11.803
+139,Calpultitlan - Moyotzingo,Calpultitlan,123,Moyotzingo,117,6.01
+140,Calpultitlan - Coxtocan,Calpultitlan,123,Coxtocan,118,5.698
+141,Tepalcatepec - Tianguizmanalco,Tepalcatepec,132,Tianguizmanalco,304,16.305
+142,Tianguizmanalco - Tepetlixpan,Tianguizmanalco,304,Tepetlixpan,305,7.713
+143,Tianguizmanalco - Atlixco,Tianguizmanalco,304,Atlixco,301,5.552
+144,Tepalcatepec - Atlixco,Tepalcatepec,132,Atlixco,301,18.573
+145,Atlixco - Quimichallan,Atlixco,301,Quimichallan,302,6.913
+146,Atlixco - Cuaco,Atlixco,301,Cuaco,303,10.36
+147,Quimichallan - Cuaco,Quimichallan,302,Cuaco,303,5.44
+148,Tianguizmanalco - Quimichallan,Tianguizmanalco,304,Quimichallan,302,7.752
+149,Tianguizmanalco - Cuaco,Tianguizmanalco,304,Cuaco,303,11.198
+150,Atlixco - Tepetlixpan,Atlixco,301,Tepetlixpan,305,10.51
+151,Tepetlixpan - Tepenacaztla,Tepetlixpan,305,Tepenacaztla,306,2.09
+152,Coyula - Cuaco,Coyula,311,Cuaco,303,3.814
+153,Coyula - Quimichallan,Coyula,311,Quimichallan,302,7.361
+154,Atlixco - Coyula,Atlixco,301,Coyula,311,12.282
+155,Tianguizmanalco - Coyula,Tianguizmanalco,304,Coyula,311,13.12
+156,Coyula - Tepetlixpan,Coyula,311,Tepetlixpan,305,9.279
+157,Coyula - Tenextepec,Coyula,311,Tenextepec,312,5.555
+158,Tepetlixpan - Chiatlan,Tepetlixpan,305,Chiatlan,310,6.209
+159,Chiatlan - Tenextepec,Chiatlan,310,Tenextepec,312,3.727
+160,Tepetlixpan - Chalma,Tepetlixpan,305,Chalma,307,2.125
+161,Chalma - Chiatlan,Chalma,307,Chiatlan,310,4.884
+162,Chalma - Tepenacaztla,Chalma,307,Tepenacaztla,306,3.594
+163,Analco - Chilhuacan,Analco,309,Chilhuacan,313,3.269
+164,Analco - Acxotlan Acatocha,Analco,309,Acxotlan Acatocha,308,3.939
+165,Tepenacaztla - Acxotlan Acatocha,Tepenacaztla,306,Acxotlan Acatocha,308,2.738
+166,Chalma - Chilhuacan,Chalma,307,Chilhuacan,313,7.423

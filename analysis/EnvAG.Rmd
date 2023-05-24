@@ -1,0 +1,606 @@
+---
+title: "Huexotzinco-Tlaxcala C16, Script #X:"
+subtitle: "Topography, Environment, Agriculture and Subsistence"
+author: "Rudolf Cesaretti"
+date: "Last run on `r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    df_print: paged
+    number_sections: true
+bibliography: References.bib
+csl: apa.csl
+link-citations: yes
+---
+
+```{css, echo=FALSE}
+pre {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+pre[class] {
+  max-height: 300px;
+}
+```
+
+```{r, setup, include=FALSE,echo=FALSE, message=FALSE,warning=FALSE}
+require(knitr)
+# Set so that long lines in R will be wrapped:
+opts_chunk$set(tidy.opts=list(width.cutoff=75),tidy=TRUE)
+#
+rm(list = ls())
+```
+
+I do four things in this R markdown document: 
+Topographic/environmental metrics
+
+  1. Calculate catchment area variables, including
+      + Topographic/environmental metrics
+      + 
+  4. Reorganize the data and export for Script #6
+  
+  
+# Setup 
+
+All of the data and scripts are downloadable from the [new ASU SettlementPersist2022 github repository](https://https://github.com/rcesaret/ASUSettlementPersist2022), which can be downloaded locally as a .zip folder or cloned to your own account.
+
+Either way, once you have done so, you will need to modify the working directory (setwd("C:/...)") path and "dir" variables in the code chunk below to match the repository location on your computer.
+
+```{r, label='Set Local Directory Location', message=FALSE,warning=FALSE}
+
+wd <- list()
+
+#SET YOUR LOCAL DIRECTORY LOCATION HERE:
+#wd$dir <- "C:/Users/rcesaret/Dropbox (ASU)/Huexotzinco/HuexTlaxAnal2022/HuexTlax2022Analysis/"
+wd$dir <- "C:/Users/TJ McMote/Dropbox (ASU)/Huexotzinco/HuexTlaxAnal2022/HuexTlax2022Analysis/"
+
+wd$analysis <- paste0(wd$dir,"analysis/")
+wd$data_r <- paste0(wd$dir,"data-raw/")
+wd$data_p <- paste0(wd$dir,"data-processed/")
+wd$data_f <- paste0(wd$dir,"data-final-outputs/")
+wd$figs <- paste0(wd$dir,"figures/")
+wd$funcs <- paste0(wd$dir,"functions/")
+
+```
+
+
+## Load R Packages and Custom Functions
+
+```{r, label='Load Libraries', message=FALSE,warning=FALSE}
+# Package names
+packages <- c("rgdal", "rgeos", "sp", "sf", "GISTools", "raster", "Matrix", "terra",
+              "gdistance", "lwgeom", "tidyverse", "tidyr", "stars", "dismo", 
+              "purrr", "spatialEco", "whitebox", "classInt","ggnewscale")#, "data.table", "zoo", "era", "JOPS", "mgcv","igraph",  "ggrepel","ggridges", "movecost",  "datplot", "scales",
+
+# Install packages not yet installed
+installed_packages <- packages %in% rownames(installed.packages())
+if (any(installed_packages == FALSE)) {
+  install.packages(packages[!installed_packages])
+}
+
+# load packages
+invisible(lapply(packages, library, character.only = TRUE))
+
+rm(packages,installed_packages)
+
+#Read in custom R functions located in the wd$funcs directory folder
+FUNCS <- list("RescaleSpatRast.R")#"splitByAttributes.R", 
+invisible(lapply(FUNCS, function(x) source(paste0(wd$funcs,x))))
+rm(FUNCS)
+
+```
+
+
+# Import and Reorganize Data
+
+Data we are importing:
+
+  1. 
+  2. 
+  3. 
+  4. 
+
+# Elevation and Slope
+
+```{r, label='Import Data', message=FALSE,warning=FALSE}
+
+## Import Smoothed 90 meter DEM
+DEM_r <- terra::rast(raster(paste0(wd$data_r, "SRTM_30m_DEM_PueblaTlaxcala2_Smooth3.tif")))
+DEM = read_stars(paste0(wd$data_r, "SRTM_30m_DEM_PueblaTlaxcala2_Smooth3.tif"))
+
+#Hillshade = read_stars(paste0(wd$data_r, "Hillshade_PueblaTlaxcala2.tif"))
+
+#HuexArable = read_stars(paste0(wd$data_r, "HuexArable5.tif"))
+
+#DEM_r <- terra::rast(raster("D:/Dropbox (ASU)/Huexotzinco/HuexTlaxAnal2022/GIS_Data/DEM_CEM_v3.0_15m_CMex.tif"))
+```
+"D:/Dropbox (ASU)/Huexotzinco/HuexTlaxAnal2022/GIS_Data/Slope_CEM_v3.0_15m_CMex.tif"
+"D:/Dropbox (ASU)/Huexotzinco/HuexTlaxAnal2022/GIS_Data/DEM_CEM_v3.0_15m_CMex.tif"
+
+
+
+CHELSA_bio10_MeanPrecip.tif
+CHELSA_bio10_meanTemp.tif
+CHELSA_gsl_GrowingSeasonLength.tif
+CHELSA_gsp_GrowingSeasonPrecipSum.tif
+CHELSA_gst_GrowingSeasonMeanTemp.tif
+CHELSA_NPP.tif
+
+SoilGrids250_BulkDensity.tif
+SoilGrids250_Clay.tif
+SoilGrids250_CoarseFragments.tif
+SoilGrids250_Nitrogen.tif
+SoilGrids250_OrganicCarbonDensity.tif
+SoilGrids250_Sand.tif
+SoilGrids250_Silt.tif
+SoilGrids250_SoilOrganaicCarbon.tif
+SoilGrids250_SoilOrganaicCarbonStock.tif
+SoilGrids250_WRBSoilType.tif
+
+x = c("CHELSA_bio10_MeanPrecip.tif", "CHELSA_bio10_meanTemp.tif")
+file_list = as.list(paste0(wd$data_r, x))
+(CHELSA = read_stars(file_list, quiet = TRUE))
+
+
+
+## Modern Avg Yeild Data
+
+```{r, label='Import and Clean Modern Avg Yeild Data', message=FALSE,warning=FALSE}
+
+#Import polygons of cultivated area by municipio and agriculture type (irrigation vs temporal)
+HuexModernCultivArea_Municip_AGType <- st_read(paste0(wd$data_r,"HuexModernCultivArea_Municip_AGType.gpkg")) %>% rename(Municipio = NOM_MUN)
+
+# these are the target municipios with polygons in the Puebla-Tlaxcala Valley we will analyze 
+mun = unique(HuexModernCultivArea_Municip_AGType$Municipio)
+
+#Import mexican municipal agricultural production stats
+x = read.csv(paste0(wd$data_r,"Cierre_agricola_mun_2003_2021.csv"))
+
+# clean and summarize the data
+x = x %>% filter(Nomcultivo == "Maiz grano") %>% filter(Nomestado == "Puebla" | Nomestado == "Tlaxcala") %>% filter(Nomcicloproductivo == "Primavera-Verano") %>% filter(Nommunicipio %in% mun) %>% mutate(Rendimiento = as.numeric(Rendimiento)) %>% group_by(Nommunicipio,Nommodalidad) %>% summarise(AvgYield = mean(Rendimiento, na.rm=T) *1000, MedYield = median(Rendimiento, na.rm=T) *1000, MinYield = min(Rendimiento, na.rm=T) *1000, MaxYield = max(Rendimiento, na.rm=T) *1000, StDevYield = sd(Rendimiento, na.rm=T) *1000, AvgArea = mean(Cosechada, na.rm=T)) %>% ungroup() %>% mutate(AG_Type = ifelse(Nommodalidad == "Riego", "Irrigation", "Temporal")) %>% rename(Municipio = Nommunicipio) %>% select(-Nommodalidad)
+
+# Join the data with the polygons
+AvgYield_sf = HuexModernCultivArea_Municip_AGType %>% left_join(x, by=c("Municipio", "AG_Type"))
+
+# create raster of average yield 
+AvgYield = AvgYield_sf %>% select(-AvgArea, -OID_1) %>% #st_rasterize(template=DEM)#, align=T
+
+rm(mun, x, HuexModernCultivArea_Municip_AGType)
+```
+
+
+!!!! st_rasterize(template=DEM)#, align=T --- DOES THIS WORK??
+
+
+
+
+INTENSITY???
+--Area of polygon
+--Avg Area cultivated
+--Avg Area cultivated / Area of polygon = intensity of maize land use??
+--pop?
+--popdens?
+--AG employment? per ha? 2010
+
+
+NEXT
+GAM MODELS - IRRIGATION + TEMPORAL
+
+THEN
+EXTRAPOLTE TO COLONIAL
+
+SAME W COCHINEAL
+
+THEN SALIENT AG/ENV VARS TO POLYGONS
+
+
+
+# Topographic/Environmental Metrics
+
+
+
+## Topographic Variables
+
+DEM_r <- terra::rast(raster(paste0(wd$data_r, "SRTM_30m_DEM_PueblaTlaxcala2_Smooth3.tif")))
+DEM = read_stars(paste0(wd$data_r, "SRTM_30m_DEM_PueblaTlaxcala2_Smooth3.tif"))
+```{r, label='Topographic Variables', message=FALSE,warning=FALSE}
+
+#create temp directory for rasters we will delete later
+# we will stack and save these together at the end of this chunk
+dir.create(paste0(wd$data_p,"temp_rasts"))
+
+######### TRI ######### 
+
+TRI <- terra::terrain(DEM_r, v="TRI")# calc Terrain Ruggedness Index
+TRI <- st_as_stars(RescaleSpatRast(TRI)) # rescale 0-1
+
+
+######### TWI ######### 
+
+wbt_breach_depressions(dem = paste0(wd$data_r,"SRTM_30m_DEM_PueblaTlaxcala2_Smooth3.tif"), output = paste0(wd$data_p,"temp_rasts/DEM_breach.tif"))
+DEM_breach <- rast(paste0(wd$data_p, "temp_rasts/DEM_breach.tif"))
+DEM_breach <- project(DEM_breach,DEM_r)
+writeRaster(DEM_breach,paste0(wd$data_p,"temp_rasts/DEM_breach.tif"), overwrite=TRUE)
+
+#DEM2 <- as(DEM, "Raster")
+slope <- terra::terrain(DEM_r, v="slope", unit="degrees")#Slope
+slope <- project(slope,DEM_r)
+writeRaster(slope,paste0(wd$data_p,"temp_rasts/Slope.tif"), overwrite=TRUE)
+
+wbt_d8_flow_accumulation(paste0(wd$data_p,"temp_rasts/DEM_breach.tif"), output=paste0(wd$data_p,"temp_rasts/Accum.tif"), out_type = "specific contributing area")
+Accum <- rast(paste0(wd$data_p, "temp_rasts/Accum.tif"))
+Accum <- project(Accum,DEM_r)
+Accum[is.nan(Accum)] <- NA
+writeRaster(Accum,paste0(wd$data_p,"temp_rasts/Accum.tif"), overwrite=TRUE)
+
+wbt_wetness_index(sca=paste0(wd$data_p,"temp_rasts/Accum.tif"), slope=paste0(wd$data_p,"temp_rasts/Slope.tif"), output=paste0(wd$data_p,"temp_rasts/TWI.tif"), verbose_mode = FALSE)
+TWI <- rast(paste0(wd$data_p, "temp_rasts/TWI.tif"))
+TWI <- project(TWI,DEM_r)
+writeRaster(TWI,paste0(wd$data_p,"temp_rasts/TWI.tif"), overwrite=TRUE)
+
+TWI.01 <- RescaleSpatRast(TWI) # rescale 0-1
+TWI.12 <- TWI.01+1
+
+######### SPI ######### 
+
+wbt_stream_power_index(sca=paste0(wd$data_p,"temp_rasts/Accum.tif"),slope=paste0(wd$data_p,"temp_rasts/Slope.tif"),output=paste0(wd$data_p,"temp_rasts/SPI.tif"),exponent = 1)
+SPI <- rast(paste0(wd$data_p, "temp_rasts/SPI.tif"))
+SPI <- project(SPI,DEM_r)
+writeRaster(SPI,paste0(wd$data_p,"temp_rasts/SPI.tif"), overwrite=TRUE)
+#SPI <- SPI * SaltLakeBinaryInvNA
+SPI.01 <- RescaleSpatRast(SPI)
+SPI.rs <- RescaleSpatRast(SPI.01)+0.5
+#SPI.rs <- SPI.rs * WetAgInv
+
+######### STI ######### 
+
+wbt_fd8_flow_accumulation(paste0(wd$data_p,"temp_rasts/DEM_breach.tif"), output=paste0(wd$data_p,"temp_rasts/Accum_fd8.tif"), out_type = "specific contributing area")
+Accum_fd8 <- rast(paste0(wd$data_p, "temp_rasts/Accum_fd8.tif"))
+Accum_fd8 <- project(Accum_fd8,DEM_r)
+writeRaster(Accum_fd8,paste0(wd$data_p,"temp_rasts/Accum_fd8.tif"), overwrite=TRUE)
+
+wbt_sediment_transport_index(sca=paste0(wd$data_p,"temp_rasts/Accum_fd8.tif"),slope=paste0(wd$data_p,"temp_rasts/Slope.tif"),output=paste0(wd$data_p,"temp_rasts/STI.tif"))
+STI <- rast(paste0(wd$data_p, "temp_rasts/STI.tif"))
+STI <- project(STI,DEM_r)
+writeRaster(STI,paste0(wd$data_p,"temp_rasts/STI.tif"), overwrite=TRUE)
+STI.12 <- RescaleSpatRast(STI)
+STI.12 <- STI.12+1
+
+######### Curv ######### 
+
+wbt_profile_curvature(dem = paste0(wd$data_p,"temp_rasts/DEM_breach.tif"), output = paste0(wd$data_p,"temp_rasts/Curv.tif"))
+Curv <- rast(paste0(wd$data_p, "temp_rasts/Curv.tif"))
+Curv <- project(Curv,DEM_r)
+writeRaster(Curv,paste0(wd$data_p,"temp_rasts/Curv.tif"), overwrite=TRUE)
+Curv[Curv < -0.001] <- -0.001
+Curv.rs <- RescaleSpatRast(Curv)*1.5
+
+######### DrainDens Inputs ######### 
+
+Accum2 <- Accum
+Accum2[Accum2 > 10000] <- 10000
+Accum2<- RescaleSpatRast(Accum2)
+
+
+```
+
+
+### Convert to Stars
+  
+```{r, label='', message=FALSE,warning=FALSE}
+
+```
+
+
+
+
+## Climate Data
+
+!!!! Change resolution and extent of CHELSA and SoilGrids to match DEM
+
+
+```{r, label='Import CHELSA Climate Data', message=FALSE,warning=FALSE}
+
+MeanPrecip = read_stars(paste0(wd$data_r, "CHELSA_bio10_MeanPrecip.tif"))
+MeanTemp = read_stars(paste0(wd$data_r, "CHELSA_bio10_meanTemp.tif"))
+NPP = read_stars(paste0(wd$data_r, "CHELSA_NPP.tif"))
+GrowSeasLen = read_stars(paste0(wd$data_r, "CHELSA_gsl_GrowingSeasonLength.tif"))
+GrowSeasPrecip = read_stars(paste0(wd$data_r, "CHELSA_gsp_GrowingSeasonPrecipSum.tif"))
+GrowSeasTemp = read_stars(paste0(wd$data_r, "CHELSA_gst_GrowingSeasonMeanTemp.tif"))
+
+library(spatialEco)
+y = as(MeanTemp, "Raster")
+x = raster(DEM_r)
+MeanTemp.ds <- spatialEco::raster.downscale(x, y, scatter=TRUE, residuals = TRUE,
+                            uncertainty = "prediction", se = TRUE)
+plot(MeanTemp.ds$downscale, main="Downscaled Mean Temp")
+```
+
+
+
+
+
+
+## Soil Data
+
+!!!! Change resolution and extent of CHELSA and SoilGrids to match DEM
+
+```{r, label='Import SoilGrids250 Data', message=FALSE,warning=FALSE}
+
+BulkDens = read_stars(paste0(wd$data_r, "SoilGrids250_BulkDensity.tif"))
+Clay = read_stars(paste0(wd$data_r, "SoilGrids250_Clay.tif"))
+CoarseFrag = read_stars(paste0(wd$data_r, "SoilGrids250_CoarseFragments.tif"))
+Nitrogen = read_stars(paste0(wd$data_r, "SoilGrids250_Nitrogen.tif"))
+OCDens = read_stars(paste0(wd$data_r, "SoilGrids250_OrganicCarbonDensity.tif"))
+Sand = read_stars(paste0(wd$data_r, "SoilGrids250_Sand.tif"))
+Silt = read_stars(paste0(wd$data_r, "SoilGrids250_Silt.tif"))
+SOC = read_stars(paste0(wd$data_r, "SoilGrids250_SoilOrganaicCarbon.tif"))
+SOCStock = read_stars(paste0(wd$data_r, "SoilGrids250_SoilOrganaicCarbonStock.tif"))
+WRBSoil = read_stars(paste0(wd$data_r, "SoilGrids250_WRBSoilType.tif"))
+
+```
+
+
+
+## Calculate Metrics for Municipal Polygons
+
+Can you do this in STARS????
+
+```{r, "Catchment Area Topographic/Environmental Metrics", warning = FALSE, message=FALSE}
+
+Catch_List2 <- list() #create output list
+
+for(i in 1:length(Catch_List)){
+  
+  #define catchment area polys as temp object
+  tmp.p <- Catch_List[[i]]
+  
+  #convert to SpatVectors class for use with terra package (much much faster)
+  tmp.p2 <- vect(tmp.p)
+  
+  # NPP
+  x <- terra::extract(NPP, tmp.p2, fun=sum, na.rm=T)
+  tmp.p@data$NPP.tot <- x[,2]
+  tmp.p@data$NPP.avg <- tmp.p@data$NPP.tot/tmp.p@data$Catchment_ha
+  
+  # Env Zone
+  x <- terra::extract(EZ, tmp.p2, fun=mean, na.rm=T)
+  tmp.p@data$EZ.avg <- x[,2]
+  x <- terra::extract(EZ, tmp.p2, fun=sd, na.rm=T)
+  tmp.p@data$EZ.sd <- x[,2]
+  
+  # TRI (Terrace Need)
+  x <- terra::extract(TRI, tmp.p2, fun=sum, na.rm=T)
+  tmp.p@data$TRI.tot <- x[,2]
+  tmp.p@data$TRI.avg <- tmp.p@data$TRI.tot/tmp.p@data$Catchment_ha
+  
+  ## Hydraulic Agriculture Potential
+  #Irrigation Potential
+  x <- terra::extract(TWI.01, tmp.p2, fun=sum, na.rm=T)
+  tmp.p@data$IrrigPot.tot <- x[,2]
+  tmp.p@data$IrrigPot.avg <- tmp.p@data$IrrigPot.tot/tmp.p@data$Catchment_ha
+  #Wetland Agriculture Potential
+  x <- terra::extract(WetAgPot, tmp.p2, fun=sum, na.rm=T)
+  tmp.p@data$WetAgPot.tot <- x[,2]
+  tmp.p@data$WetAgPot.avg <- tmp.p@data$WetAgPot.tot/tmp.p@data$Catchment_ha
+  
+  # Intensification costs
+  x <- terra::extract(IntnsCost, tmp.p2, fun=sum, na.rm=T)
+  tmp.p@data$IntnsCost.tot <- x[,2]
+  tmp.p@data$IntnsCost.avg <- tmp.p@data$IntnsCost.tot/tmp.p@data$Catchment_ha
+  # Intensification costs excluding wetland agriculture
+  x <- terra::extract(IntnsCostNW, tmp.p2, fun=sum, na.rm=T)
+  tmp.p@data$IntnsCostNW.tot <- x[,2]
+  tmp.p@data$IntnsCostNW.avg <- tmp.p@data$IntnsCostNW.tot/tmp.p@data$Catchment_ha
+  
+  # Agricultural Potential
+  x <- terra::extract(AGPot, tmp.p2, fun=sum, na.rm=T)
+  tmp.p@data$AGPot.tot <- x[,2]
+  tmp.p@data$AGPot.avg <- tmp.p@data$AGPot.tot/tmp.p@data$Catchment_ha
+  # Agricultural Potential excluding wetland agriculture
+  x <- terra::extract(AGPotNW, tmp.p2, fun=sum, na.rm=T)
+  tmp.p@data$AGPotNW.tot <- x[,2]
+  tmp.p@data$AGPotNW.avg <- tmp.p@data$AGPotNW.tot/tmp.p@data$Catchment_ha
+  
+  # Population Pressure
+  tmp.p@data$PopPressure <- tmp.p@data$Population.s2/tmp.p@data$AGPot.tot
+  tmp.p@data$PopPressureNW <- tmp.p@data$Population.s2/tmp.p@data$AGPotNW.tot
+  
+  # Erosion Potential
+  x <- terra::extract(ErosionPot, tmp.p2, fun=sum, na.rm=T)
+  tmp.p@data$ErosionPot.tot <- x[,2]
+  tmp.p@data$ErosionPot.avg <- tmp.p@data$ErosionPot.tot/tmp.p@data$Catchment_ha
+  
+  Catch_List2[[i]] <- tmp.p #save to output list
+}
+
+# rename list items
+catch.names <- names(Catch_List)
+names(Catch_List2) <- catch.names
+Catch_List <- Catch_List2
+rm(Catch_List2)
+```
+
+
+## Agricultural Intensity
+
+
+INTENSITY???
+--Area of polygon
+--Avg Area cultivated
+--Avg Area cultivated / Area of polygon = intensity of maize land use??
+--pop?
+--popdens?
+--AG employment? per ha? 2010
+
+
+
+
+## Reorganize and Export Raster Data
+
+!!! DO THIS IN STARS
+
+
+```{r, "Reorganize and Export Raster Data", warning = FALSE, message=FALSE}
+TopoEnvData_RastStack <- c(DEM, Curv, Curv.rs, Accum, Accum_fd8, Accum2, AGPot, AGPotNW, EZ, FreshLakeDepth, FreshLakeDepth.12, IntnsCost, IntnsCostNW, LakesBinaryInv, LakesBinaryInvNA, NPP, NPP.rs, NPP.rs.wetMod, SaltLakeBinaryInv, SaltLakeBinaryInvNA, slope, SPI, SPI.01, SPI.01.wetMod, SPI.rs, STI, STI.12, TRI, TRI.01, TRI.01.wetMod, TWI, TWI.01, TWI.12, TWI.12.wetMod, WetAgInv, WetAgPot, WetAgPot2, ErosionPot)
+
+nam = c("DEM", "Curv", "Curv.rs", "Accum", "Accum_fd8", "Accum2", "AGPot", "AGPotNW", "EZ", "FreshLakeDepth", "FreshLakeDepth.12", "IntnsCost", "IntnsCostNW", "LakesBinaryInv", "LakesBinaryInvNA", "NPP", "NPP.rs", "NPP.rs.wetMod", "SaltLakeBinaryInv", "SaltLakeBinaryInvNA", "slope", "SPI", "SPI.01", "SPI.01.wetMod", "SPI.rs", "STI", "STI.12", "TRI", 'TRI.01', "TRI.01.wetMod", "TWI", "TWI.01", "TWI.12", "TWI.12.wetMod", "WetAgInv", "WetAgPot", "WetAgPot2", "ErosionPot")
+
+names(TopoEnvData_RastStack) = nam
+
+terra::writeRaster(TopoEnvData_RastStack, paste0(wd$data_p, "TopoEnvData_RastLayers.tif"), overwrite=T)
+terra::writeRaster(TopoEnvData_RastStack, paste0(wd$data_f, "TopoEnvData_RastLayers.tif"), overwrite=T)
+
+unlink(paste0(wd$data_p, "temp_rasts"), recursive = TRUE)
+
+rm(Catch_List2, x, DEM, Curv.01, Curv, Curv.rs, Accum, Accum_fd8, Accum2, AGPot, AGPotNW, EZ, FreshLakeDepth, FreshLakeDepth.12, IntensCost, IntnsCostNW, LakesBinaryInv, LakesBinaryInvNA, NPP, NPP.01, NPP.rs, NPP.rs.wetMod, NPP2, SaltLakeBinaryInv, SaltLakeBinaryInvNA, slope, SPI, SPI.01, SPI.01.wetMod, SPI.rs, STI, STI.12, tmp.p, tmp.p2, tmp.r, TRI, TRI.01, TRI.01.wetMod, TRI.12, TRI.rs, TWI, TWI.01, TWI.12, TWI.12.wetMod, WetAgInv, WetAgPot, WetAgPot2, ErosionPot, IntnsCost,npp,EZm,TopoEnvData_RastStack)
+```
+
+
+
+# Modelling Modern Crop Yields
+
+GAM MODELS - IRRIGATION + TEMPORAL
+
+Or Random Forest
+
+Use LASSO routine
+
+
+
+## Temporal
+
+
+## Irrigation
+
+
+
+# Estimating 16th Century Yields
+
+EXTRAPOLTE TO COLONIAL
+
+Apply model to Full Arable Area (HuexArable5)
+
+This will now be a raster model, using HuexArable5 as a mask
+
+!!! Arable Area (HuexArable5) needs partition between Irrigation + Temporal
+-- Use wetland AG Lopez Corral map to estimate area of irrigation -- in addition to modern distribution of irrigation agriculture
+
+!!! Apply temporal model everywhere first to estimate rainfed yields?? THEN apply irrigation overlay for restricted area???
+
+!!! Do modern yields need rescaling to reach 16th century yields?? Or does the greater labor intensity per unit area + multicropping (companion planting) C16 make the colonial yields comparable to modern ones??
+--need to look at colonial recorded maize yields and convert to kg/ha
+
+!!! Each raster cell is how many ha? --> convert each cell to the gross amount of kg maize
+--then to people per nutritional reqs --> carrying capacity of each cell
+
+## Temporal
+
+
+## Irrigation
+
+
+
+
+
+# Upload Agricultural, Environmental and Topo metrics to MH_Poly
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Cochineal Production
+
+--greater towards Cholula-Puebla... market forces? Environmental factors?
+--N-S gradient in Huex/Salvador
+--less in the north and south, more in the east and center
+--biased by cabecera! Cholula > Calpan >> Huex/Salvador (Markets)... you can see this clearly comparing Huex and Calpan, and especially the sujetos of Huex vs Calpan in the Atlixco Valley
+--Smaller settlements have higher New-Old ratio == production expanding over time in smaller settlements 
+--Larger settlements tend to have more Old Nopales per cap (market forces?)... !! Older pop centers (fewer renters + haciendas) tend to be the dominant cultivators of Cochineal
+------> this suggests that renters were forced to cultivate estates/haciendas for AG surplus, with much lower market access (contributing to the pattern of RdC-govt-tribute specialization in renter zones), while freeholders nearer to markets were free to exploit the cultivation of grana
+--Huex and Atlixco may have lower per cap due to higher agricultural productivity(?)
+--greater intensity + land use of cochineal production in more heavily populated areas(!). You would think this would be the inverse -- that lower popdens == less pop pressure == more land/ability to cultivate cochineal. But it looks like the key factors are climate, market access, and polit-econ demands/control of labor.
+--This in-turn helps explain why renters in Tepetlaoztoc often had more land than freeholders. Not only did they have to pay rents on this land + be subject to the demands of the landowners, they were encumbered by the labor demands of larger-scale staple agriculture + part-time crafting AT THE EXPENSE OF OTHER MORE LUCRATIVE MARKET GARDENING (turkeys, firewood, tlameme, gathering, cochineal) cornered by the freeholders surrounding population centers
+
+Calculate:
+--pop density
+--dist to Puebla
+--Longer leagues
+--Actual distances
+--Accessibility pop
+--Accessibility cabecera
+--Accessibility haciendas
+
+```{r, label='Import Data', message=FALSE,warning=FALSE}
+
+# Cochineal data from 1600
+Cochineal1600 = st_read(paste0(wd$data_r,"Cochineal1600.gpkg"))
+Cochineal1600h = st_read(paste0(wd$data_r,"Cochineal1600.gpkg")) %>% filter(
+  Cabecera == "Huexotzinco" |  Cabecera == "San Salvador") %>% filter(North > 2100000)
+```
+
+
+
+> plot(Cochineal1600["Cabecera"], pch=19)
+> plot(Cochineal1600["OldPerCap"], pch=19)
+> plot(Cochineal1600["NewPerCap"], pch=19)
+> plot(Cochineal1600["TotalPerCap"], pch=19)
+
+plot(Cochineal1600h["TotalPerCap"], pch=19)
+> plot(Cochineal1600h["OldPerCap"], pch=19)
+> plot(Cochineal1600h["NewPerCap"], pch=19)
+> plot(Cochineal1600h$Vecinos, Cochineal1600h$OldPerCap)
+> plot(Cochineal1600h$Vecinos, Cochineal1600h$Dist_Leagues)
+> plot(Cochineal1600h$OldPerCap, Cochineal1600h$Dist_Leagues)
+> plot(Cochineal1600h$NewPerCap, Cochineal1600h$Dist_Leagues)
+> plot(Cochineal1600h$TotalPerCap, Cochineal1600h$Dist_Leagues)
+> plot(Cochineal1600h$NewOldRatio, Cochineal1600h$Dist_Leagues)
+> plot(Cochineal1600h$NewOldRatio, Cochineal1600h$Vecinos)
+
+
+
+
+
+

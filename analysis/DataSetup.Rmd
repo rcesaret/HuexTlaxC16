@@ -1,0 +1,881 @@
+---
+title: "Data Setup"
+author: "Rudolf Cesaretti"
+date: "2023-03-05"
+output: html_document
+---
+
+
+```{r, setup, include=FALSE,echo=FALSE, message=FALSE,warning=FALSE}
+require(knitr)
+# Set so that long lines in R will be wrapped:
+opts_chunk$set(tidy.opts=list(width.cutoff=75),tidy=TRUE)
+#
+rm(list = ls())
+```
+
+
+
+# Setup 
+
+All of the data and scripts are downloadable from the [new ASU SettlementPersist2022 github repository](https://https://github.com/rcesaret/ASUSettlementPersist2022), which can be downloaded locally as a .zip folder or cloned to your own account.
+
+Either way, once you have done so, you will need to modify the working directory (setwd("C:/...)") path and "dir" variables in the code chunk below to match the repository location on your computer.
+
+```{r, label='Set Local Directory Location', message=FALSE,warning=FALSE}
+
+wd <- list()
+
+#SET YOUR LOCAL DIRECTORY LOCATION HERE:
+#wd$dir <- "C:/Users/rcesaret/Dropbox (ASU)/Huexotzinco/HuexTlaxAnal2022/HuexTlax2022Analysis/"
+wd$dir <- "C:/Users/TJ McMote/Dropbox (ASU)/Huexotzinco/HuexTlaxAnal2022/HuexTlax2022Analysis/"
+
+wd$analysis <- paste0(wd$dir,"analysis/")
+wd$data_r <- paste0(wd$dir,"data-raw/")
+wd$data_p <- paste0(wd$dir,"data-processed/")
+wd$data_f <- paste0(wd$dir,"data-final-outputs/")
+wd$figs <- paste0(wd$dir,"figures/")
+wd$funcs <- paste0(wd$dir,"functions/")
+
+```
+
+
+## Load R Packages and Custom Functions
+
+```{r, label='Load Libraries', message=FALSE,warning=FALSE}
+# Package names
+packages <- c("rgdal", "sp", "sf", "GISTools", "lwgeom", "tidyverse", "tidyr", 
+              "data.table", "zoo", "scales", "sjmisc", "REAT")
+              
+              #, "data.table",  "mgcv","igraph", "ggrepel","ggridges", "movecost",  "datplot", "scales",
+
+# Install packages not yet installed
+installed_packages <- packages %in% rownames(installed.packages())
+if (any(installed_packages == FALSE)) {
+  install.packages(packages[!installed_packages])
+}
+
+# load packages
+invisible(lapply(packages, library, character.only = TRUE))
+
+rm(packages,installed_packages)
+
+#Read in custom R functions located in the wd$funcs directory folder
+#FUNCS <- list("splitByAttributes.R", "RS_Acoef.R", "PopAreaResids.R", "LQ.R", "GiniSp.R")
+#invisible(lapply(FUNCS, function(x) source(paste0(wd$funcs,x))))
+#rm(FUNCS)
+
+```
+
+
+Objectives:
+-- Calculate demographic variables for dataset
+-Demog summary vars
+-Pop summary vars
+-Class summary
+-Nobles summary vars
+-Specialist summary vars
+
+Decisions/Assumptions:
+
+-We are only counting 'heads of household'. As such, we are EXCLUDING attached noble women who are neither widows nor the head of a household. The assumption here is that the male nobles featured in CNpicto beneath a noble house are male heads of household, but the women are not. This is because they have no equivalent among the commoner pages of CNpicto and similar 16th century Nahua pictorial censuses make clear that attached women are common features of commoner households. This further assumes that all adult males were counted in CNpicto for tributary obligation reasons -- regardless of whether they were attached beneath another male head of household.
+
+-Merchant nobles as free commoners (given analysis comparison of cNpicto and CNalfb)
+
+- We are operationally defining "Occupational Specialists" as those employed in something other than subsistence farming. This is taken to exclude small farmers who sell small marketable surpluses of produce, staples, animals, firewood, etc. for market. This has 2 operationalizations:
+--including nobles
+--excluding nobles
+
+- The total "employed" population == everyone == Total living households. Includes sick and widows, widowers and old men 
+
+```{r, label='Import Data', message=FALSE,warning=FALSE}
+
+# Read-in the data
+MH_Settlements <- read.csv(paste0(wd$data_r,"MH_Settlements.csv"))
+MH_Occu <- read.csv(paste0(wd$data_r,"MH_Occu.csv"))
+MH_Attr <- read.csv(paste0(wd$data_r,"MH_Attr.csv"), na.strings	= "")
+
+#Poly <- readOGR(paste0(wd$data_r,"SBOMPoly.gpkg"))
+
+```
+
+
+
+
+
+
+```{r}
+
+#MH_SD <- left_join(MH_Settlements, MH_Data, by=c('ORD'='ORD', 'Name'='Name'))
+
+MH_Occu_long <- MH_Occu %>% pivot_longer(cols = OldFarm_T:CantSeeIfOccu_U,
+  names_to = "Variable", values_to = "Count") %>% filter(Count != 0) %>% 
+  left_join(MH_Attr, by="Variable")
+
+MH_Occu_long_Totals <- MH_Occu_long %>% filter(Status == "Total")
+
+MH_Occu_long_NoTotals <- MH_Occu_long %>% filter(Status != "Total")
+
+### Add total columns for every variable??? (Nobles, infirm demog, etc.)
+
+
+```
+
+
+# Calculate Macro Demog/Econ/Class Counts
+
+
+```{r}
+
+## Total CNpicto Pop Head Count (including attached/dependent noblewomen)
+
+TotalCount = MH_Occu_long_NoTotals %>% filter(Demog != "Runaway") %>% filter(Demog != "Dead") %>% 
+  group_by(Name) %>% summarise(TotalCount = sum(Count))
+
+## Total Heads of Household
+
+TotalHH = MH_Occu_long_NoTotals %>% filter(Demog != "Runaway") %>% filter(Demog != "Dead") %>% filter(OccuSpecInclude != "DemogExcl" & Demog != "FemaleNoble") %>% group_by(Name) %>% summarise(TotalHH = sum(Count))
+
+## Total Nobles
+
+TotalNobles = MH_Occu_long_NoTotals %>% filter(Class == "Noble") %>% 
+  group_by(Name) %>% summarise(Nobles_T = sum(Count))
+
+## Total Nobles - Excluding Female Nobles that are not heads of household
+
+NobleHH = MH_Occu_long_NoTotals %>% filter(Class == "Noble" & Demog != "FemaleNoble") %>% group_by(Name) %>% summarise(NobleHH = sum(Count))
+
+## Attached/Dependent Female Nobles
+
+NobleAttachedFem = MH_Occu_long_NoTotals %>% filter(OccuSpecInclude == "DemogExcl" &
+  Demog == "FemaleNoble") %>% group_by(Name) %>% summarise(NobleAttachedFem = sum(Count))
+
+## Total Commoner heads of household
+
+Commoners_T = MH_Occu_long_NoTotals %>% filter(Class == "Commoner") %>% filter(Demog != "Runaway") %>% filter(Demog != "Dead") %>% group_by(Name) %>% summarise(CommonerHH_T = sum(Count))
+
+## Freeholder Commoner heads of household
+
+Commoners_F = MH_Occu_long_NoTotals %>% filter(Class == "Commoner") %>% filter(Demog != "Runaway") %>% filter(Demog != "Dead") %>% filter(Status == "Free") %>% group_by(Name) %>% summarise(CommonerHH_F = sum(Count))
+
+## Renter Commoner heads of household 
+
+Commoners_R = MH_Occu_long_NoTotals %>% filter(Class == "Commoner") %>% filter(Demog != "Runaway") %>% filter(Demog != "Dead") %>% filter(Status == "Renter") %>% group_by(Name) %>% summarise(CommonerHH_R = sum(Count))
+
+## Uncertain Status Commoner heads of household
+
+Commoners_U = MH_Occu_long_NoTotals %>% filter(Class == "Commoner") %>% filter(Demog != "Runaway") %>% filter(Demog != "Dead") %>% filter(Status == "Uncertain") %>% group_by(Name) %>% summarise(CommonerHH_U = sum(Count))
+
+## Recent Runaway heads of household
+
+RunawayHH = MH_Occu_long_NoTotals %>% filter(Demog == "Runaway") %>% 
+   group_by(Name) %>% summarise(RunawayHH = sum(Count))
+
+## Recently Dead heads of household
+
+DeadHH = MH_Occu_long_NoTotals %>% filter(Demog == "Dead") %>% 
+   group_by(Name) %>% summarise(DeadHH = sum(Count))
+
+## Total Tributaries
+
+TribHH_T = MH_Occu_long_NoTotals %>% filter(Trib == "Tributary") %>% 
+   group_by(Name) %>% summarise(TribHH_T = sum(Count))
+
+## Free Tributaries
+
+TribHH_F = MH_Occu_long_NoTotals %>% filter(Trib == "Tributary") %>% 
+   filter(Status == "Free") %>% group_by(Name) %>% summarise(TribHH_F = sum(Count))
+
+## Renter Tributaries
+
+TribHH_R = MH_Occu_long_NoTotals %>% filter(Trib == "Tributary") %>% 
+   filter(Status == "Renter") %>% group_by(Name) %>% summarise(TribHH_R = sum(Count))
+
+## Uncertain Status Tributaries
+
+TribHH_U = MH_Occu_long_NoTotals %>% filter(Trib == "Tributary") %>% 
+   filter(Status == "Uncertain") %>% group_by(Name) %>% summarise(TribHH_U = sum(Count))
+
+## Total Exempt (Non-Tributary) Commoner Heads of Household
+
+ExemptCommonerHH_T = MH_Occu_long_NoTotals %>% filter(Trib == "Exempt") %>% 
+   group_by(Name) %>% summarise(ExemptCommonerHH_T = sum(Count))
+
+## Freeholder Exempt (Non-Tributary) Commoner Heads of Household
+
+ExemptCommonerHH_F = MH_Occu_long_NoTotals %>% filter(Trib == "Exempt") %>% 
+   filter(Status == "Free") %>% group_by(Name) %>% summarise(ExemptCommonerHH_F = sum(Count))
+
+## Renter Exempt (Non-Tributary) Commoner Heads of Household
+
+ExemptCommonerHH_R = MH_Occu_long_NoTotals %>% filter(Trib == "Exempt") %>% 
+   filter(Status == "Renter") %>% group_by(Name) %>% summarise(ExemptCommonerHH_R = sum(Count))
+
+## Uncertain Status Exempt (Non-Tributary) Commoner Heads of Household
+
+ExemptCommonerHH_U = MH_Occu_long_NoTotals %>% filter(Trib == "Exempt") %>% 
+   filter(Status == "Uncertain") %>% group_by(Name) %>% summarise(ExemptCommonerHH_U = sum(Count))
+
+## Total Elderly (Non-Tributary) Commoner Heads of Household
+
+OldHH_T = MH_Occu_long_NoTotals %>% filter(Demog == "Elderly") %>% 
+   group_by(Name) %>% summarise(OldHH_T = sum(Count))
+
+## Freeholder Elderly (Non-Tributary) Commoner Heads of Household
+
+OldHH_F = MH_Occu_long_NoTotals %>% filter(Demog == "Elderly") %>% 
+   filter(Status == "Free") %>% group_by(Name) %>% summarise(OldHH_F = sum(Count))
+
+## Renter Elderly (Non-Tributary) Commoner Heads of Household
+
+OldHH_R = MH_Occu_long_NoTotals %>% filter(Demog == "Elderly") %>% 
+   filter(Status == "Renter") %>% group_by(Name) %>% summarise(OldHH_R = sum(Count))
+
+## Uncertain Status Elderly (Non-Tributary) Commoner Heads of Household
+
+OldHH_U	= MH_Occu_long_NoTotals %>% filter(Demog == "Elderly") %>% 
+   filter(Status == "Uncertain") %>% group_by(Name) %>% summarise(OldHH_U = sum(Count))
+
+## Total Widower (Non-Tributary) Commoner Heads of Household
+
+WidowerHH_T = MH_Occu_long_NoTotals %>% filter(Demog == "Widower") %>% 
+   group_by(Name) %>% summarise(WidowerHH_T = sum(Count))
+
+## Freeholder Widower (Non-Tributary) Commoner Heads of Household
+
+WidowerHH_F = MH_Occu_long_NoTotals %>% filter(Demog == "Widower") %>% 
+   filter(Status == "Free") %>% group_by(Name) %>% summarise(WidowerHH_F = sum(Count))
+
+## Renter Widower (Non-Tributary) Commoner Heads of Household
+
+WidowerHH_R = MH_Occu_long_NoTotals %>% filter(Demog == "Widower") %>% 
+   filter(Status == "Renter") %>% group_by(Name) %>% summarise(WidowerHH_R = sum(Count))
+
+## Uncertain Status Widower (Non-Tributary) Commoner Heads of Household
+
+WidowerHH_U = MH_Occu_long_NoTotals %>% filter(Demog == "Widower") %>% 
+   filter(Status == "Uncertain") %>% group_by(Name) %>% summarise(WidowerHH_U = sum(Count))
+
+## Total Widow (Non-Tributary) Commoner Heads of Household
+
+WidowHH = MH_Occu_long_NoTotals %>% filter(Demog == "Widow") %>% 
+   group_by(Name) %>% summarise(WidowHH = sum(Count))
+				
+## Total Sick/Infirm/Disabled (Non-Tributary) Commoner Heads of Household
+
+SickHH = MH_Occu_long_NoTotals %>% filter(Demog == "Sick") %>% 
+   group_by(Name) %>% summarise(SickHH = sum(Count))
+	
+## Total Occupational Specialists
+
+Specialists_T = MH_Occu_long_NoTotals %>% filter(OccuSpecInclude == "OccuSpec" | OccuSpecInclude == "ExemptSpec"| OccuSpecInclude == "MerchNobleSpec"| OccuSpecInclude == "NobleSpec") %>% group_by(Name) %>% summarise(Specialists_T = sum(Count))
+
+## Total Freeholder Occupational Specialists
+
+Specialists_F = MH_Occu_long_NoTotals %>% filter(OccuSpecInclude == "OccuSpec" | OccuSpecInclude == "ExemptSpec"| OccuSpecInclude == "MerchNobleSpec"| OccuSpecInclude == "NobleSpec") %>% filter(Status == "Free") %>% group_by(Name) %>% summarise(Specialists_F = sum(Count))
+
+## Total Renter Occupational Specialists
+
+Specialists_R = MH_Occu_long_NoTotals %>% filter(OccuSpecInclude == "OccuSpec" | OccuSpecInclude == "ExemptSpec"| OccuSpecInclude == "MerchNobleSpec"| OccuSpecInclude == "NobleSpec") %>% filter(Status == "Renter") %>% group_by(Name) %>% summarise(Specialists_R = sum(Count))
+
+## Total Uncertain Status Occupational Specialists
+
+Specialists_U = MH_Occu_long_NoTotals %>% filter(OccuSpecInclude == "OccuSpec" | OccuSpecInclude == "ExemptSpec"| OccuSpecInclude == "MerchNobleSpec"| OccuSpecInclude == "NobleSpec") %>% filter(Status == "Uncertain") %>% group_by(Name) %>% summarise(Specialists_U = sum(Count))
+
+## Total Merchant Noble Occupational Specialists
+
+Specialists_MN = MH_Occu_long_NoTotals %>% filter(OccuSpecInclude == "OccuSpec" | OccuSpecInclude == "ExemptSpec"| OccuSpecInclude == "MerchNobleSpec"| OccuSpecInclude == "NobleSpec") %>% filter(Status == "MerchNoble") %>% group_by(Name) %>% summarise(Specialists_MN = sum(Count))
+
+## Total Noble Occupational Specialists
+
+Specialists_N = MH_Occu_long_NoTotals %>% filter(OccuSpecInclude == "OccuSpec" | OccuSpecInclude == "ExemptSpec"| OccuSpecInclude == "MerchNobleSpec"| OccuSpecInclude == "NobleSpec") %>% filter(Status == "Noble") %>% group_by(Name) %>% summarise(Specialists_N = sum(Count))
+
+## Total Occupational Specialists -- excluding Centecpanpixque and Macuiltecpanpixque
+
+SpecialistsNoPix_T = MH_Occu_long_NoTotals %>% filter(OccuSpecInclude == "OccuSpec" | OccuSpecInclude == "ExemptSpec"| OccuSpecInclude == "MerchNobleSpec"| OccuSpecInclude == "NobleSpec") %>% filter(Occupation != "CenPix") %>% filter(Occupation != "MacPix") %>% group_by(Name) %>% summarise(SpecialistsNoPix_T = sum(Count))
+
+## Total Freeholder Occupational Specialists -- excluding Centecpanpixque and Macuiltecpanpixque
+
+SpecialistsNoPix_F = MH_Occu_long_NoTotals %>% filter(OccuSpecInclude == "OccuSpec" | OccuSpecInclude == "ExemptSpec"| OccuSpecInclude == "MerchNobleSpec"| OccuSpecInclude == "NobleSpec") %>% filter(Status == "Free") %>% filter(Occupation != "CenPix") %>% filter(Occupation != "MacPix") %>% group_by(Name) %>% summarise(SpecialistsNoPix_F = sum(Count))
+
+## Total Renter Occupational Specialists -- excluding Centecpanpixque and Macuiltecpanpixque
+
+SpecialistsNoPix_R = MH_Occu_long_NoTotals %>% filter(OccuSpecInclude == "OccuSpec" | OccuSpecInclude == "ExemptSpec"| OccuSpecInclude == "MerchNobleSpec"| OccuSpecInclude == "NobleSpec") %>% filter(Status == "Renter") %>% filter(Occupation != "CenPix") %>% filter(Occupation != "MacPix") %>% group_by(Name) %>% summarise(SpecialistsNoPix_R = sum(Count))
+
+## Total Uncertain Status Occupational Specialists -- excluding Centecpanpixque and Macuiltecpanpixque
+
+SpecialistsNoPix_U = MH_Occu_long_NoTotals %>% filter(OccuSpecInclude == "OccuSpec" | OccuSpecInclude == "ExemptSpec"| OccuSpecInclude == "MerchNobleSpec"| OccuSpecInclude == "NobleSpec") %>% filter(Status == "Uncertain") %>% filter(Occupation != "CenPix") %>% filter(Occupation != "MacPix") %>% group_by(Name) %>% summarise(SpecialistsNoPix_U = sum(Count))
+
+## Total Merchant Noble Occupational Specialists -- excluding Centecpanpixque and Macuiltecpanpixque
+
+SpecialistsNoPix_MN = MH_Occu_long_NoTotals %>% filter(OccuSpecInclude == "OccuSpec" | OccuSpecInclude == "ExemptSpec"| OccuSpecInclude == "MerchNobleSpec"| OccuSpecInclude == "NobleSpec") %>% filter(Status == "MerchNoble") %>% filter(Occupation != "CenPix") %>% filter(Occupation != "MacPix") %>% group_by(Name) %>% summarise(SpecialistsNoPix_MN = sum(Count))
+
+## Total Noble Occupational Specialists -- excluding Centecpanpixque and Macuiltecpanpixque
+
+SpecialistsNoPix_N = MH_Occu_long_NoTotals %>% filter(OccuSpecInclude == "OccuSpec" | OccuSpecInclude == "ExemptSpec"| OccuSpecInclude == "MerchNobleSpec"| OccuSpecInclude == "NobleSpec") %>% filter(Status == "Noble") %>% filter(Occupation != "CenPix") %>% filter(Occupation != "MacPix") %>% group_by(Name) %>% summarise(SpecialistsNoPix_N = sum(Count))
+
+## Total Tributary Occupational Specialists (including Merchant Nobles)
+
+TribSpecialists_T = MH_Occu_long_NoTotals %>% filter(OccuSpecInclude == "OccuSpec" | OccuSpecInclude == "MerchNobleSpec") %>% group_by(Name) %>% summarise(TribSpecialists_T = sum(Count))
+
+## Freeholding Tributary Occupational Specialists (including Merchant Nobles)
+
+TribSpecialists_F = MH_Occu_long_NoTotals %>% filter(OccuSpecInclude == "OccuSpec" | OccuSpecInclude == "MerchNobleSpec") %>% filter(Status == "Free" | Status == "MerchNoble") %>% group_by(Name) %>% summarise(TribSpecialists_F = sum(Count))
+
+## Renter Tributary Occupational Specialists
+
+TribSpecialists_R = MH_Occu_long_NoTotals %>% filter(OccuSpecInclude == "OccuSpec" | OccuSpecInclude == "MerchNobleSpec") %>% filter(Status == "Renter") %>% group_by(Name) %>% summarise(TribSpecialists_R = sum(Count))
+
+## Uncertain Status Tributary Occupational Specialists
+
+TribSpecialists_U = MH_Occu_long_NoTotals %>% filter(OccuSpecInclude == "OccuSpec" | OccuSpecInclude == "MerchNobleSpec") %>%  filter(Status == "Uncertain") %>% group_by(Name) %>% summarise(TribSpecialists_U = sum(Count))
+
+## Total Tributary Occupational Specialists (including Merchant Nobles) -- excluding Centecpanpixque and Macuiltecpanpixque
+
+TribSpecialistsNoPix_T = MH_Occu_long_NoTotals %>% filter(OccuSpecInclude == "OccuSpec" | OccuSpecInclude == "MerchNobleSpec") %>% filter(Occupation != "CenPix") %>% filter(Occupation != "MacPix") %>% group_by(Name) %>% summarise(TribSpecialistsNoPix_T = sum(Count))
+
+## Freeholding Tributary Occupational Specialists (including Merchant Nobles) -- excluding Centecpanpixque and Macuiltecpanpixque
+
+TribSpecialistsNoPix_F = MH_Occu_long_NoTotals %>% filter(OccuSpecInclude == "OccuSpec" | OccuSpecInclude == "MerchNobleSpec") %>% filter(Status == "Free" | Status == "MerchNoble") %>% filter(Occupation != "CenPix") %>% filter(Occupation != "MacPix") %>% group_by(Name) %>% summarise(TribSpecialistsNoPix_F = sum(Count))
+
+## Renter Tributary Occupational Specialists -- excluding Centecpanpixque and Macuiltecpanpixque
+
+TribSpecialistsNoPix_R = MH_Occu_long_NoTotals %>% filter(OccuSpecInclude == "OccuSpec" | OccuSpecInclude == "MerchNobleSpec") %>% filter(Status == "Renter") %>% filter(Occupation != "CenPix") %>% filter(Occupation != "MacPix") %>% group_by(Name) %>% summarise(TribSpecialistsNoPix_R = sum(Count))
+
+## Uncertain Status Tributary Occupational Specialists -- excluding Centecpanpixque and Macuiltecpanpixque
+
+TribSpecialistsNoPix_U = MH_Occu_long_NoTotals %>% filter(OccuSpecInclude == "OccuSpec" | OccuSpecInclude == "MerchNobleSpec") %>%  filter(Status == "Uncertain") %>% filter(Occupation != "CenPix") %>% filter(Occupation != "MacPix") %>% group_by(Name) %>% summarise(TribSpecialistsNoPix_U = sum(Count))
+
+## Total Elderly (Non-Tributary) Occupational Specialists
+
+OldSpecialists_T = MH_Occu_long_NoTotals %>% filter(OccuSpecInclude == "ExemptSpec") %>% 
+  group_by(Name) %>% summarise(OldSpecialists_T = sum(Count))
+
+## Freeholder Elderly (Non-Tributary) Occupational Specialists
+
+OldSpecialists_F = MH_Occu_long_NoTotals %>% filter(OccuSpecInclude == "ExemptSpec") %>% 
+  filter(Status == "Free") %>% group_by(Name) %>% summarise(OldSpecialists_F = sum(Count))
+
+## Renter Elderly (Non-Tributary) Occupational Specialists
+
+OldSpecialists_R = MH_Occu_long_NoTotals %>% filter(OccuSpecInclude == "ExemptSpec") %>% 
+  filter(Status == "Renter") %>% group_by(Name) %>% summarise(OldSpecialists_R = sum(Count))
+
+## Uncertain Status Elderly (Non-Tributary) Occupational Specialists
+
+OldSpecialists_U = MH_Occu_long_NoTotals %>% filter(OccuSpecInclude == "ExemptSpec") %>% 
+  filter(Status == "Uncertain") %>% group_by(Name) %>% summarise(OldSpecialists_U = sum(Count))
+
+## Total Cannot See if they are Occupational Specialists
+
+CantSeeIfOccu_T = MH_Occu_long_NoTotals %>% filter(OccuSpecInclude == "CantSeeIfOccu") %>% 
+   group_by(Name) %>% summarise(CantSeeIfOccu_T = sum(Count))
+
+## Free Cannot See if they are Occupational Specialists
+
+CantSeeIfOccu_F = MH_Occu_long_NoTotals %>% filter(Variable == "CantSeeIfOccu_F") %>% 
+   group_by(Name) %>% summarise(CantSeeIfOccu_F = sum(Count))
+
+## Renter Cannot See if they are Occupational Specialists
+
+CantSeeIfOccu_R = MH_Occu_long_NoTotals %>% filter(Variable == "CantSeeIfOccu_R") %>% 
+   group_by(Name) %>% summarise(CantSeeIfOccu_R = sum(Count))
+
+## Uncertain Status Cannot See if they are Occupational Specialists
+
+CantSeeIfOccu_U = MH_Occu_long_NoTotals %>% filter(Variable == "CantSeeIfOccu_U") %>% 
+   group_by(Name) %>% summarise(CantSeeIfOccu_U = sum(Count))
+
+## Total Farmers - including Exempt/Non-Tributaries
+
+FarmersTotal_T = MH_Occu_long_NoTotals %>% filter(Occupation == "Farmer") %>% 
+   group_by(Name) %>% summarise(FarmersTotal_T = sum(Count))
+
+## Total Freeholder Farmers - including Exempt/Non-Tributaries
+
+FarmersTotal_F = MH_Occu_long_NoTotals %>% filter(Occupation == "Farmer") %>% filter(Status == "Free") %>%
+   group_by(Name) %>% summarise(FarmersTotal_F = sum(Count))
+
+## Total Renter Farmers - including Exempt/Non-Tributaries
+
+FarmersTotal_R = MH_Occu_long_NoTotals %>% filter(Occupation == "Farmer") %>% filter(Status == "Renter") %>%
+   group_by(Name) %>% summarise(FarmersTotal_R = sum(Count))
+
+## Total Uncertain Status Farmers - including Exempt/Non-Tributaries
+
+FarmersTotal_U = MH_Occu_long_NoTotals %>% filter(Occupation == "Farmer") %>% filter(Status == "Uncertain") %>%
+   group_by(Name) %>% summarise(FarmersTotal_U = sum(Count))
+
+## Total Farmers - including Exempt/Non-Tributaries and Widows
+
+FarmersTotalW_T = MH_Occu_long_NoTotals %>% filter(Occupation == "Farmer" | Occupation == "Widow") %>% 
+   group_by(Name) %>% summarise(FarmersTotalW_T = sum(Count))
+
+## Total Freeholder Farmers - including Exempt/Non-Tributaries and Widows
+
+FarmersTotalW_F = MH_Occu_long_NoTotals %>% filter(Occupation == "Farmer" | Occupation == "Widow") %>% filter(Status == "Free") %>% group_by(Name) %>% summarise(FarmersTotalW_F = sum(Count))
+
+## Total Renter Farmers - including Exempt/Non-Tributaries and Widows
+
+FarmersTotalW_R = MH_Occu_long_NoTotals %>% filter(Occupation == "Farmer" | Occupation == "Widow") %>% filter(Status == "Renter") %>% group_by(Name) %>% summarise(FarmersTotalW_R = sum(Count))
+
+## Total Uncertain Status Farmers - including Exempt/Non-Tributaries and Widows
+
+FarmersTotalW_U = MH_Occu_long_NoTotals %>% filter(Occupation == "Farmer" | Occupation == "Widow") %>% filter(Status == "Uncertain") %>% group_by(Name) %>% summarise(FarmersTotalW_U = sum(Count))
+
+## Total Tributary Farmers
+
+FarmersTrib_T = MH_Occu_long_NoTotals %>% filter(Occupation == "Farmer" & Trib == "Tributary") %>% group_by(Name) %>% summarise(FarmersTrib_T = sum(Count))
+
+## Freeholder Tributary Farmers
+
+FarmersTrib_F = MH_Occu_long_NoTotals %>% filter(Occupation == "Farmer" & Trib == "Tributary") %>% filter(Status == "Free") %>% group_by(Name) %>% summarise(FarmersTrib_F = sum(Count))
+
+## Renter Tributary Farmers
+
+FarmersTrib_R = MH_Occu_long_NoTotals %>% filter(Occupation == "Farmer" & Trib == "Tributary") %>% filter(Status == "Renter") %>% group_by(Name) %>% summarise(FarmersTrib_R = sum(Count))
+
+## Uncertain Status Tributary Farmers
+
+FarmersTrib_U = MH_Occu_long_NoTotals %>% filter(Occupation == "Farmer" & Trib == "Tributary") %>% filter(Status == "Uncertain") %>% group_by(Name) %>% summarise(FarmersTrib_U = sum(Count))
+
+## Total Exempt/Non-Tributary Farmers - excluding Widows
+
+FarmersExempt_T = MH_Occu_long_NoTotals %>% filter(Occupation == "Farmer" & Trib == "Exempt") %>% group_by(Name) %>% summarise(FarmersExempt_T = sum(Count))
+
+## Freeholder Exempt/Non-Tributary Farmers - excluding Widows
+
+FarmersExempt_F = MH_Occu_long_NoTotals %>% filter(Occupation == "Farmer" & Trib == "Exempt") %>% filter(Status == "Free") %>% group_by(Name) %>% summarise(FarmersExempt_F = sum(Count))
+
+## Renter Exempt/Non-Tributary Farmers - excluding Widows
+
+FarmersExempt_R = MH_Occu_long_NoTotals %>% filter(Occupation == "Farmer" & Trib == "Exempt") %>% filter(Status == "Renter") %>% group_by(Name) %>% summarise(FarmersExempt_R = sum(Count))
+
+## Uncertain Status Exempt/Non-Tributary Farmers - excluding Widows
+
+FarmersExempt_U = MH_Occu_long_NoTotals %>% filter(Occupation == "Farmer" & Trib == "Exempt" ) %>% filter(Status == "Uncertain") %>% group_by(Name) %>% summarise(FarmersExempt_U = sum(Count))
+
+## Total Exempt/Non-Tributary Farmers - including Widows
+
+FarmersExemptW_T = MH_Occu_long_NoTotals %>% filter(Occupation == "Farmer" & Trib == "Exempt" | Occupation == "Widow") %>% group_by(Name) %>% summarise(FarmersExemptW_T = sum(Count))
+
+## Total Freeholder Exempt/Non-Tributary Farmers - including Widows
+
+FarmersExemptW_F = MH_Occu_long_NoTotals %>% filter(Occupation == "Farmer" & Trib == "Exempt" | Occupation == "Widow") %>% filter(Status == "Free") %>% group_by(Name) %>% summarise(FarmersExemptW_F = sum(Count))
+
+## Total Renter Exempt/Non-Tributary Farmers - including Widows
+
+FarmersExemptW_R = MH_Occu_long_NoTotals %>% filter(Occupation == "Farmer" & Trib == "Exempt" | Occupation == "Widow") %>% filter(Status == "Renter") %>% group_by(Name) %>% summarise(FarmersExemptW_R = sum(Count))
+
+## Total Uncertain Status Exempt/Non-Tributary Farmers - including Widows
+
+FarmersExemptW_U = MH_Occu_long_NoTotals %>% filter(Occupation == "Farmer" & Trib == "Exempt" | Occupation == "Widow") %>% filter(Status == "Uncertain") %>% group_by(Name) %>% summarise(FarmersExemptW_U = sum(Count))
+
+
+```
+
+	
+
+
+```{r}
+x = TotalCount %>% left_join(TotalHH, by = "Name") %>% left_join(TotalNobles, by = "Name") %>%
+  left_join(NobleHH, by = "Name") %>% 
+  left_join(Commoners_T, by = "Name") %>% left_join(Commoners_F, by = "Name") %>% 
+  left_join(Commoners_R, by = "Name") %>% left_join(Commoners_U, by = "Name") %>% 
+  left_join(RunawayHH, by = "Name") %>% left_join(DeadHH, by = "Name") %>% 
+  left_join(TribHH_T, by = "Name") %>% left_join(TribHH_F, by = "Name") %>% 
+  left_join(TribHH_R, by = "Name") %>% left_join(TribHH_U, by = "Name") %>%
+  left_join(ExemptCommonerHH_T, by = "Name") %>% left_join(ExemptCommonerHH_F, by = "Name") %>%
+  left_join(ExemptCommonerHH_R, by = "Name") %>% left_join(ExemptCommonerHH_U, by = "Name") %>%
+  left_join(OldHH_T, by = "Name") %>% left_join(OldHH_F, by = "Name") %>%
+  left_join(OldHH_R, by = "Name") %>% left_join(OldHH_U, by = "Name") %>%
+  left_join(WidowerHH_T, by = "Name") %>% left_join(WidowerHH_F, by = "Name") %>%
+  left_join(WidowerHH_R, by = "Name") %>% left_join(WidowerHH_U, by = "Name") %>%
+  left_join(WidowHH, by = "Name") %>% left_join(SickHH, by = "Name") %>%
+  left_join(Specialists_T, by = "Name") %>% left_join(Specialists_F, by = "Name") %>%
+  left_join(Specialists_R, by = "Name") %>% left_join(Specialists_U, by = "Name") %>%
+  left_join(Specialists_MN, by = "Name") %>% left_join(Specialists_N, by = "Name") %>%
+  left_join(SpecialistsNoPix_T, by = "Name") %>% left_join(SpecialistsNoPix_F, by = "Name") %>%
+  left_join(SpecialistsNoPix_R, by = "Name") %>% left_join(SpecialistsNoPix_U, by = "Name") %>%
+  left_join(SpecialistsNoPix_MN, by = "Name") %>% left_join(SpecialistsNoPix_N, by = "Name") %>%
+  left_join(TribSpecialists_T, by = "Name") %>% left_join(TribSpecialists_F, by = "Name") %>%
+  left_join(TribSpecialists_R, by = "Name") %>% left_join(TribSpecialists_U, by = "Name") %>%
+  left_join(TribSpecialistsNoPix_T, by = "Name") %>% left_join(TribSpecialistsNoPix_F, by = "Name") %>%
+  left_join(TribSpecialistsNoPix_R, by = "Name") %>% left_join(TribSpecialistsNoPix_U, by = "Name") %>%
+  left_join(OldSpecialists_T, by = "Name") %>% left_join(OldSpecialists_F, by = "Name") %>%
+  left_join(OldSpecialists_R, by = "Name") %>% left_join(OldSpecialists_U, by = "Name") %>%
+  left_join(CantSeeIfOccu_T, by = "Name") %>% left_join(CantSeeIfOccu_F, by = "Name") %>%
+  left_join(CantSeeIfOccu_R, by = "Name") %>% left_join(CantSeeIfOccu_U, by = "Name") %>%
+  left_join(FarmersTotal_T, by = "Name") %>% left_join(FarmersTotal_F, by = "Name") %>%
+  left_join(FarmersTotal_R, by = "Name") %>% left_join(FarmersTotal_U, by = "Name") %>%
+  left_join(FarmersTotalW_T, by = "Name") %>% left_join(FarmersTotalW_F, by = "Name") %>%
+  left_join(FarmersTotalW_R, by = "Name") %>% left_join(FarmersTotalW_U, by = "Name") %>%
+  left_join(FarmersTrib_T, by = "Name") %>% left_join(FarmersTrib_F, by = "Name") %>%
+  left_join(FarmersTrib_R, by = "Name") %>% left_join(FarmersTrib_U, by = "Name") %>%
+  left_join(FarmersExempt_T, by = "Name") %>% left_join(FarmersExempt_F, by = "Name") %>%
+  left_join(FarmersExempt_R, by = "Name") %>% left_join(FarmersExempt_U, by = "Name") %>%
+  left_join(FarmersExemptW_T, by = "Name") %>% left_join(FarmersExemptW_F, by = "Name") %>%
+  left_join(FarmersExemptW_R, by = "Name") %>% left_join(FarmersExemptW_U, by = "Name")
+x[is.na(x)] <- 0
+
+MH_Settlements <- MH_Settlements %>% left_join(x, by = "Name") 
+
+```
+  
+  
+```{r}
+rm(TotalCount, TotalHH, TotalNobles, NobleHH, NobleAttachedFem, Commoners_T, Commoners_F, Commoners_R, Commoners_U, RunawayHH, DeadHH, TribHH_T, TribHH_F, TribHH_R, TribHH_U, ExemptCommonerHH_T, ExemptCommonerHH_F, ExemptCommonerHH_R, ExemptCommonerHH_U, OldHH_T, OldHH_F, OldHH_R, OldHH_U, WidowerHH_T, WidowerHH_F, WidowerHH_R, WidowerHH_U, WidowHH, SickHH, Specialists_T, Specialists_F, Specialists_R, Specialists_U, Specialists_MN, Specialists_N, SpecialistsNoPix_T, SpecialistsNoPix_F, SpecialistsNoPix_R, SpecialistsNoPix_U, SpecialistsNoPix_MN, SpecialistsNoPix_N, TribSpecialists_T, TribSpecialists_F, TribSpecialists_R, TribSpecialists_U, TribSpecialistsNoPix_T, TribSpecialistsNoPix_F, TribSpecialistsNoPix_R, TribSpecialistsNoPix_U, OldSpecialists_T, OldSpecialists_F, OldSpecialists_R, OldSpecialists_U, CantSeeIfOccu_T, CantSeeIfOccu_F, CantSeeIfOccu_R, CantSeeIfOccu_U, FarmersTotal_T, FarmersTotal_F, FarmersTotal_R, FarmersTotal_U, FarmersTotalW_T, FarmersTotalW_F, FarmersTotalW_R, FarmersTotalW_U, FarmersTrib_T, FarmersTrib_F, FarmersTrib_R, FarmersTrib_U, FarmersExempt_T, FarmersExempt_F, FarmersExempt_R, FarmersExempt_U, FarmersExemptW_T, FarmersExemptW_F, FarmersExemptW_R, FarmersExemptW_U, x)
+```
+
+
+
+#
+Change "Name" to "Community"
+
+
+FIRST - Aggregate (in both MH_Occu + MH_Attr)
+-- FieldHand + SpWorker
+-- Quarrier + Stonecutter
+
+Remove the originals
+
+Need a binary (1,0) variable that tells us which variables used for 
+--population
+--specialists
+--etc.
+**VIA MULTIPLICATION**
+
+```{r}
+
+#MH_SD <- left_join(MH_Settlements, MH_Data, by=c('ORD'='ORD', 'Name'='Name'))
+
+MH_Occu_long <- MH_Occu %>% pivot_longer(cols = OldFarm_T:CantSeeIfOccu_U,
+  names_to = "Variable", values_to = "Count") %>% filter(Count != 0) %>% 
+  left_join(MH_Attr, by="Variable")
+
+MH_Occu_long_Totals <- MH_Occu_long %>% filter(Status == "Total")
+
+MH_Occu_long_NoTotals <- MH_Occu_long %>% filter(Status != "Total")
+
+### Add total columns for every variable??? (Nobles, infirm demog, etc.)
+
+
+```
+
+
+BELOW Belassa calculation Should probably use with Totals:
+--as was done in the joffa analyses
+--the belassas of the totals can be used as data to regress against %renter, etc.
+--belassa dataframe is needed
+
+Should also be done with the AggZones rather than the barrios
+
+
+
+```{r}
+q = MH_Occu_long %>% 
+  
+  # within each community and Occupation, get the total (as opposed to F R U) next to the T-F-R-U count so that 
+  #you can caluclate the percentage F-R-U of the Total occupation in each status group within the community
+  group_by(Name, Occupation2) %>% mutate(CountRowTotal = max(Count)) %>% ungroup() %>%  mutate(PctRowTotal = Count / CountRowTotal) %>% 
+  
+  #Total community HH + row % HH
+  group_by(Name) %>% mutate(LocHH = sum(PopHH.m*Count)) %>% ungroup() %>% mutate(PctLocHH = (Count*Pop.m) / LocHH) %>%
+  
+  #Total community commoner HH + row % commoner HH
+  group_by(Name) %>% mutate(LocCommonHH = sum(CommonHH.m*Count)) %>% ungroup() %>% mutate(PctLocCommonHH = (Count*Common.m) / LocCommonHH) %>% 
+  
+  #Total community Noble HH + row % Noble HH
+  group_by(Name) %>% mutate(LocNobleHH = sum(NobleHH.m*Count)) %>% ungroup() %>% mutate(PctLocNobleHH = (Count*Noble.m) / LocNobleHH) %>% 
+  
+  #Total community Trib HH + row % Trib HH
+  group_by(Name) %>% mutate(LocTribHH = sum(TribHH.m*Count)) %>% ungroup() %>% mutate(PctLocTribHH = (Count*Trib.m) / LocTribHH) %>% 
+
+  #Total community NonTrib HH + row % NonTrib HH
+  group_by(Name) %>% mutate(LocExemptHH = sum(ExemptHH.m*Count)) %>% ungroup() %>% mutate(PctLocExemptHH = (Count*Exempt.m) / LocExemptHH) %>%
+  
+  #Total community Specialist HH + row % Specialist HH
+  ## LocSpecHH == com.specialists
+  group_by(Name) %>% mutate(LocSpecHH = sum(SpecHH.m*Count)) %>% ungroup() %>% mutate(PctLocSpecHH = (Count*Spec.m) / LocSpecHH) %>%
+  group_by(Name) %>% mutate(LocSpecHH_N = sum(SpecHH_N.m*Count)) %>% ungroup() %>% mutate(PctLocSpecHH_N = (Count*Spec_N.m) / LocSpecHH_N)
+
+
+is.nan.data.frame <- function(x) do.call(cbind, lapply(x, is.nan))
+q[is.nan(q)] <- 0
+is.na(q)<-sapply(q, is.infinite)
+q$PctLocSpecHH[is.na(q$PctLocSpecHH)]<-0
+
+q = q %>% 
+  # Total overall SpecialistHH by occupation+status and overall SpecialistHH by occupation; and row percents thereof
+## OccuSpecsHH_Status / OccuSpecsHH == occ.specialists
+  group_by(Variable) %>% mutate(OccuSpecsHH_Status = sum(Count, na.rm = T)) %>% ungroup() %>%
+  mutate(PctOccuSpecsHH_Status = Count / OccuSpecsHH_Status) %>% group_by(Occupation2) %>% mutate(OccuSpecsHH = max(OccuSpecsHH_Status, na.rm = T)) %>% ungroup() %>% mutate(PctOccuSpecsHH = Count / OccuSpecsHH) %>%
+  
+  mutate(Total_Specialists = sum((SpecHH.m*Count), na.rm=T), Total_Specialists_N = sum((SpecHH_N.m*Count), na.rm=T), Total_PopHH = sum((PopHH.m*Count), na.rm=T)) %>% 
+  
+  #Belassa = (Workers / comm.specialists) / (occ.specialists / total.specialists)
+  mutate(Belassa = ifelse(Spec.m > 0, ((Count / LocSpecHH) / (OccuSpecsHH / Total_Specialists)), NA),
+  Belassa_N = ifelse(Spec_N.m > 0, ((Count / LocSpecHH_N) / (OccuSpecsHH / Total_Specialists_N)), NA),
+  #Belassa_pop = (Workers / TotalHH) / (occ.specialists / total.population)
+  Belassa_pop = (Count / LocHH) / (OccuSpecsHH / Total_PopHH))
+
+
+```
+
+
+```{r}
+qq = q %>% pivot_wider(id_cols = c("ORD", "Name"), names_from = Variable, values_from = Belassa)
+```
+
+
+
+```{r}
+is.nan.data.frame <- function(x) do.call(cbind, lapply(x, is.nan))
+# within each community and Occupation, get the total (as opposed to F R U) next to the T-F-R-U count so that 
+#you can caluclate the percentage F-R-U of the Total occupation in each status group within the community
+q = MH_Occu_long %>% group_by(Name, Occupation2) %>% mutate(CountRowTotal = max(Count)) %>% ungroup() %>%
+  mutate(PctRowTotal = Count / CountRowTotal)
+
+#Total community HH + row % HH
+r = MH_Occu_long %>% group_by(Name) %>% mutate(LocHH = sum(PopHH.m*Count)) %>% ungroup() %>%
+  mutate(PctLocHH = (Count*Pop.m) / LocHH)
+
+#Total community commoner HH + row % commoner HH
+s = MH_Occu_long %>% group_by(Name) %>% mutate(LocCommonHH = sum(CommonHH.m*Count)) %>% ungroup() %>%
+  mutate(PctLocCommonHH = (Count*Common.m) / LocCommonHH)
+
+#Total community Noble HH + row % Noble HH
+t = MH_Occu_long %>% group_by(Name) %>% mutate(LocNobleHH = sum(NobleHH.m*Count)) %>% ungroup() %>%
+  mutate(PctLocNobleHH = (Count*Noble.m) / LocNobleHH)
+
+#Total community Trib HH + row % Trib HH
+u = MH_Occu_long %>% group_by(Name) %>% mutate(LocTribHH = sum(TribHH.m*Count)) %>% ungroup() %>%
+  mutate(PctLocTribHH = (Count*Trib.m) / LocTribHH)
+
+#Total community NonTrib HH + row % NonTrib HH
+v = MH_Occu_long %>% group_by(Name) %>% mutate(LocExemptHH = sum(ExemptHH.m*Count)) %>% ungroup() %>%
+  mutate(PctLocExemptHH = (Count*Exempt.m) / LocExemptHH)
+
+#Total community Specialist HH + row % Specialist HH
+## LocSpecHH == com.specialists
+w = MH_Occu_long %>% group_by(Name) %>% mutate(LocSpecHH = sum(SpecHH.m*Count)) %>% ungroup() %>%
+  mutate(PctLocSpecHH = (Count*Spec.m) / LocSpecHH)
+
+x = MH_Occu_long %>% group_by(Name) %>% mutate(LocSpecHH_N = sum(SpecHH_N.m*Count)) %>% ungroup() %>%
+  mutate(PctLocSpecHH_N = (Count*Spec_N.m) / LocSpecHH_N)
+
+w[is.nan(w)] <- 0
+is.na(w)<-sapply(w, is.infinite)
+w$PctLocSpecHH[is.na(w$PctLocSpecHH)]<-0
+
+# Total overall HH, NobleHH, CommonerHH, TribHH, NonTribHH, SpecialistHH
+
+# Row % of Total overall HH, NobleHH, CommonerHH, TribHH, NonTribHH, SpecialistHH
+# Total overall specialists 
+
+# Total overall SpecialistHH by occupation+status and overall SpecialistHH by occupation; and row percents thereof
+## OccuSpecsHH_Status / OccuSpecsHH == occ.specialists
+a = MH_Occu_long %>% group_by(Variable) %>% mutate(OccuSpecsHH_Status = sum(Count, na.rm = T)) %>% ungroup() %>%
+  mutate(PctOccuSpecsHH_Status = Count / OccuSpecsHH_Status) %>% group_by(Occupation2) %>% mutate(OccuSpecsHH = max(OccuSpecsHH_Status, na.rm = T)) %>% ungroup() %>% mutate(PctOccuSpecsHH = Count / OccuSpecsHH)
+### this includes non specialist vars...!!!
+
+b = MH_Occu_long %>% mutate(Total_Specialists = sum((SpecHH.m*Count), na.rm=T), Total_Specialists_N = sum((SpecHH_N.m*Count), na.rm=T), Total_PopHH = sum((PopHH.m*Count), na.rm=T))
+
+#Belassa = (Workers / comm.specialists) / (occ.specialists / total.specialists)
+Belassa = ifelse(Spec.m > 0, ((Count / LocSpecHH) / (OccuSpecsHH / Total_Specialists)), NA)
+Belassa_N = ifelse(Spec_N.m > 0, ((Count / LocSpecHH_N) / (OccuSpecsHH / Total_Specialists_N)), NA)
+
+#Belassa_pop = (Workers / TotalHH) / (occ.specialists / total.population)
+Belassa_pop = (Count / LocHH) / (OccuSpecsHH / Total_PopHH)
+
+
+```
+
+In the long data, for each count+variable present, we want the 
+For each 
+
+
+whether the variable is a specialist
+Total Specialists in community
+Total Specialists global
+Total pop in community 
+Total pop overall
+
+data_long <- data_long %>% group_by(Community) %>% mutate(comm.specialists = sum(Workers), diversity = sum(presence), 
+        percent.specialists = sum(Workers) / Casados) %>% group_by(Occupation) %>% 
+    mutate(occ.specialists = sum(Workers, na.rm = T), ubiquity = sum(presence, na.rm = T)) %>% ungroup %>% 
+    mutate(ES = Workers / comm.specialists, AA = Workers / occ.specialists, ES_pop = Workers / TotalHH, Belassa = (Workers / comm.specialists) / (occ.specialists / total.specialists), 
+        Belassa_pop = (Workers / TotalHH) / (occ.specialists / total.population), SOI = (Workers / occ.specialists) / (TotalHH / total.population), AAD = (Workers / occ.specialists) / TotalHH, SD = Workers / TotalHH) %>%  filter(Belassa > 0) %>%  
+    mutate(log.Belassa = log(Belassa), log.AA = log(AA), log.ES = log(ES), log.ES_pop = log(ES_pop), log.Belassa_pop = log(Belassa_pop), log.SOI = log(SOI), log.AAD = log(AAD), log.SD = log(SD))
+    
+    
+# Overall Occupation Numbers, Ubiquity, Concentration and Dispersion
+
+
+
+```{r}
+
+AggZones = MH_Settlements %>% select(AggZone_ID, AggZone, ORD, Name)
+
+MH_Agg_Occu = AggZones %>% left_join(MH_Occu, by = c("ORD", "Name")) %>% select(-ORD, -Name) %>% group_by(AggZone_ID, AggZone) %>% summarise_if(is.numeric, sum)%>% ungroup 
+
+MH_Agg_Occu_Long = MH_Agg_Occu %>% pivot_longer(cols = OldFarm_T:CantSeeIfOccu_U,
+  names_to = "Variable", values_to = "Count") %>% filter(Count != 0) %>% 
+  left_join(MH_Attr, by="Variable") 
+
+MH_Agg_Occu_Long2 = MH_Agg_Occu_Long %>% #filter(Status == "Total") %>% 
+  #filter(OccuSpecInclude != "DemogExcl") %>% filter(OccuSpecInclude != "DeadRunaway") %>% filter(OccuSpecInclude != "ExemptFarmers") %>% 
+  mutate(presence = ifelse(Count > 0, 1, 0)) %>% group_by(Variable) %>% mutate(occ.specialists = sum(Count, na.rm = T), ubiquity = sum(presence, na.rm = T)) %>% ungroup 
+
+y = MH_Agg_Occu_Long2 %>% group_by(Variable, occ.specialists, ubiquity) %>% summarise() %>% ungroup() %>% rename(Ubiquity_Agg = ubiquity)
+  
+MH_Occu_Long2 = MH_Occu_long %>% left_join(AggZones, by = c("ORD", "Name")) %>% 
+  #filter(OccuSpecInclude != "DemogExcl") %>% filter(OccuSpecInclude != "DeadRunaway") %>% filter(OccuSpecInclude != "ExemptFarmers") %>% 
+  mutate(presence = ifelse(Count > 0, 1, 0)) %>% group_by(Variable) %>% mutate(occ.specialists = sum(Count, na.rm = T), ubiquity = sum(presence, na.rm = T)) %>% ungroup 
+
+z = MH_Occu_Long2 %>% group_by(Variable, occ.specialists, ubiquity) %>% summarise() %>% ungroup() %>% rename(Ubiquity_Barrios = ubiquity)
+
+x = y %>% full_join(z, by = c("Variable", "occ.specialists"))
+
+MH_Attr2 = MH_Attr %>% left_join(x, by = "Variable") %>% rename(TotalCount = occ.specialists)
+
+MH_Attr2[,28:30][is.na(MH_Attr2[,28:30])] <- 0
+```
+
+```{r}
+
+q = MH_Attr2 %>% group_by()
+```
+
+
+```{r}
+
+y = disp(MH_Agg_Occu[c(3:285)])
+y2 = as.data.frame(t(as.matrix(y))) 
+y2 = y2 %>% select(-Theil, -Dalton)
+colnames(y2) <- paste(colnames(y2), "Agg", sep = "_")
+y2$Variable = rownames(y2)
+
+x = disp(MH_Occu[c(3:285)])
+x2 = as.data.frame(t(as.matrix(x))) 
+x2 = x2 %>% select(-Theil, -Dalton)
+colnames(x2) <- paste(colnames(x2), "Bar", sep = "_")
+x2$Variable = rownames(x2)
+
+z = x2 %>% left_join(y2, by="Variable")
+names(z) <- c("Gini_Bar", "GiniNorm_Bar", "HHI_Bar", "HHINorm_Bar", "HHIeq_Bar", "HooverNon-Wt_Bar", "CoulterNon-Wt_Bar", "Atkinson_Bar", "SD_Bar", "CV_Bar", "CVNorm_Bar", "Variable", "Gini_Agg", "GiniNorm_Agg", "HHI_Agg", "HHINorm_Agg", "HHIeq_Agg", "HooverNon-Wt_Agg", "CoulterNon-Wt_Agg","Atkinson_Agg", "SD_Agg", "CV_Agg", "CVNprm_Agg")
+MH_Attr3 = MH_Attr2 %>% left_join(z, by = "Variable")
+
+```
+
+
+```{r}
+rm(x,x2,y,y2,z)
+```
+
+
+
+
+
+
+
+# Overall Occupation Numbers, Ubiquity, Concentration and Dispersion
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+MH_Poly <- st_read(paste0(wd$data_r,"MH_Poly.gpkg")) %>% rename(AggZone_ID = id, AggZone = Name)
+```
+
+
+
+# Polygon Aggregations
+
+```{r}
+MH_Agg = MH_Settlements %>% select(-ORD, -East, -North, -AggZoneNumConserv, -ConservAgg_East, -ConservAgg_North, -AggZone_fid) %>% left_join(MH_Occu, by = "Name") %>% group_by(AggZone_ID, AggZone) %>% summarise_if(is.numeric, sum) %>% ungroup()
+
+MH_Agg_Poly <- MH_Poly %>% left_join(MH_Agg, by = c("AggZone_ID", "AggZone"))
+```
+
+
+
+
+
+
+
+
+Aggregate
+--Total Points
+--Barrio Points
+--Aggregations
+--Aggregations Polygons
+--Aggregations Points
+--Pueblo Aggregations Points
+
+
+Percentages
+--Barrio Points
+--Aggregations Polygons
+--Aggregations Points
+--Pueblo Aggregations Points
+
+Diversity
+Ubiquity
+Belassa
+
+Demand Index??
+
+
+# Export Data
+
+```{r, label='Data Export', message=FALSE,warning=FALSE}
+
+write.csv(MH_Settlements, paste0(wd$data_p,"MH_Settlements.csv"))
+
+write.csv(MH_Occu, paste0(wd$data_p,"MH_Occu.csv"))
+
+write.csv(MH_Occu_long, paste0(wd$data_p,"MH_Occu_Long.csv"))
+
+write.csv(MH_Occu_long_NoTotals, paste0(wd$data_p,"MH_Occu_Long_NoTotals.csv"))
+
+write.csv(MH_Occu_long_Totals, paste0(wd$data_p,"MH_Occu_Long_Totals.csv"))
+
+
+
+
+
+writeOGR(All_Poly2, paste0(wd$data_p,"SBOM_Poly1.gpkg"), "SBOM_Poly1", driver = "GPKG", overwrite_layer=TRUE)
+
+writeOGR(All_Poly_Aggr, paste0(wd$data_p,"SBOM_AggPoly1.gpkg"), "SBOM_AggPoly1", driver = "GPKG", overwrite_layer=TRUE)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

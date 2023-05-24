@@ -1,0 +1,826 @@
+---
+title: "Tlaxcala PTSXVI Preliminary Analysis:"
+subtitle: "11/2/22"
+author: "Rudolf Cesaretti"
+date: "Last run on `r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    df_print: paged
+    number_sections: true
+bibliography: References.bib
+csl: apa.csl
+link-citations: yes
+---
+
+```{css, echo=FALSE}
+pre {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+pre[class] {
+  max-height: 300px;
+}
+```
+
+```{r, setup, include=FALSE,echo=FALSE, message=FALSE,warning=FALSE}
+require(knitr)
+# Set so that long lines in R will be wrapped:
+opts_chunk$set(tidy.opts=list(width.cutoff=75),tidy=TRUE)
+#
+rm(list = ls())
+```
+
+In this R markdown document, I [...]
+
+  
+# Setup 
+
+All of the data and scripts are downloadable from the [new ASU SettlementPersist2022 github repository](https://https://github.com/rcesaret/ASUSettlementPersist2022), which can be downloaded locally as a .zip folder or cloned to your own account.
+
+Either way, once you have done so, you will need to modify the working directory (setwd("C:/...)") path and "dir" variables in the code chunk below to match the repository location on your computer.
+
+```{r, label='Set Local Directory Location', message=FALSE,warning=FALSE}
+
+wd <- list()
+
+#SET YOUR LOCAL DIRECTORY LOCATION HERE:
+#wd$dir <- "C:/Users/rcesaret/Dropbox (ASU)/Huexotzinco/HuexTlaxAnal2022/HuexTlax2022Analysis/"
+wd$dir <- "C:/Users/TJ McMote/Dropbox (ASU)/Huexotzinco/HuexTlaxAnal2022/HuexTlax2022Analysis/"
+
+wd$analysis <- paste0(wd$dir,"analysis/")
+wd$data_r <- paste0(wd$dir,"data-raw/")
+wd$data_p <- paste0(wd$dir,"data-processed/")
+wd$data_f <- paste0(wd$dir,"data-final-outputs/")
+wd$figs <- paste0(wd$dir,"figures/")
+wd$funcs <- paste0(wd$dir,"functions/")
+
+```
+
+
+## Load R Packages and Custom Functions
+
+
+library(stringr)
+
+library(gtools) #provides combination function for edge list creation
+
+library(gridExtra)
+
+library(mapview)
+
+#library(ncf)
+
+library(ggspatial)
+
+"pacman", 
+"igraph", "statnet", "tidygraph", "centiserve", "CINNA", "sfnetworks", 
+ "modelsummary",  "minpack.lm", 
+"terra", 
+
+
+"mgcv", "mgcViz", "gratia",
+              
+"gravity", "spflow", "simodels"
+"leastcostpath", "whitebox", "rasterVis", "spatialEco", 
+
+"classInt",
+
+"cccd","maptools", "deldir",
+              
+```{r, label='Load Libraries and functions', message=FALSE,warning=FALSE}
+# Package names
+packages <- c("rgdal", "rgeos", "sp", "spdep", "sf", "GISTools", "lwgeom", "dismo",               "tidyverse", "tidyr", "data.table", "purrr", "zoo", "scales", "broom", "raster", "stars", "viridis", "Matrix", "geodist", "gdistance", "movecost", "od", "Cairo", "ggthemes", "ggnewscale", "scatterpie", "RColorBrewer", "cowplot","ggplotify", "ggiraphExtra","ggfortify", "ggridges", "ggrepel",  "ggsn", "SpatialPosition", "lctools", "SpatialAcc", "REAT")
+
+# Install packages not yet installed
+installed_packages <- packages %in% rownames(installed.packages())
+if (any(installed_packages == FALSE)) {
+  install.packages(packages[!installed_packages])
+}
+
+# load packages
+invisible(lapply(packages, library, character.only = TRUE))
+
+rm(packages,installed_packages)
+
+#Read in custom R functions located in the wd$funcs directory folder
+#FUNCS <- list("Script1_HelperFunctions.R", "splitByAttributes.R", "PolyInstersects_df.R", "OverlapPoly.R", "ContinuityCalc.R", "DissolvePoly.R")
+#invisible(lapply(FUNCS, function(x) source(paste0(wd$funcs,x))))
+#rm(FUNCS)
+```
+
+
+# Base Data
+
+We upload the full BOM site data with Angela's added variables. This is the "SiteData" tab in Excel Spreadsheet "BoMSiteContinuityData.xlsx" located here: `Dropbox (ASU)\Settlement Persistence Project\Samples-Data\Basin of Mexico Survey Data\Basin of Mexico Survey Analyses\BoMSiteContinuityData.xlsx`
+
+We also upload BOM survey site polygons I have created for sites in the SW BOM. This will be our initial sample case for data construction and analysis.
+
+```{r, label='Import Data', message=FALSE,warning=FALSE}
+
+# Read-in the data
+Data <- read.csv(paste0(wd$data_r,"TlaxPueblosPrelim.csv"))
+Attr <- read.csv(paste0(wd$data_r,"TlaxPueblosPrelim_Attr.csv"))
+Poly <- readOGR(paste0(wd$data_r,"TlaxPueblosPoly.gpkg"))
+
+pts <- Data[,-c(22:132)]
+
+pts_spdf <- SpatialPointsDataFrame(coords = pts[,9:10], data = pts, proj4string = CRS("+proj=utm +zone=14 +datum=WGS84 +units=m +no_defs"))
+
+
+```
+
+
+
+# Calculate Distances
+
+-to Tlaxcala
+-to Ocotelolco
+-to nearest market
+-to tequitl center
+-to nearest center (provincial center or cabecera)
+
+```{r}
+pts_spdf@data <- pts_spdf@data %>% mutate(
+  
+      #TequitlCenter Binary Variable
+      TequitlHeader = TequitlCenter,
+      TequitlCenter = ifelse(TequitlOrd == 1, 1, 0),
+  
+      #Calculate distance to the City of Tlaxcala
+      Dist_Ciudad = pointDistance(p1 = pts_spdf@coords, p2 = c(580024, 2136079), 
+                                  lonlat=F)/1000,
+      #Calculate distance to Ocotelolco
+      Dist_Oco = pointDistance(p1 = pts_spdf@coords, p2 = c(580251.2, 2137402.5), 
+                               lonlat=F)/1000)
+
+#Distance Matrix
+DistMat = pointDistance(pts_spdf@coords, lonlat=F, allpairs=T)/1000
+rownames(DistMat) <- pts_spdf@data$Community
+colnames(DistMat) <- pts_spdf@data$Community
+
+#Distance to Tequitl Center
+TequitlHeaderNames <- pts_spdf@data %>% filter(TequitlCenter == 1) %>% pull(Community)
+THD = as.data.frame(DistMat[,colnames(DistMat) %in% TequitlHeaderNames])
+THD <- THD %>% mutate(Center = pts_spdf@data$TequitlHeader) %>% rowwise() %>%
+  mutate( Dist_TequitCent = get(Center))
+
+pts_spdf@data$Dist_TequitlCent <- THD$Dist_TequitCent
+rm(THD,TequitlHeaderNames)
+
+#Distance to Nearest Market
+MarketNames <- pts_spdf@data %>% filter(Markets > 0) %>% pull(Community)
+MD = as.data.frame(DistMat[,colnames(DistMat) %in% MarketNames])
+MD <- MD %>% rowwise() %>% mutate( MinDist_Market = min(c_across(`San Francisco Ocotelolco`:`San Ildefonso Hueyotlipan`)))
+
+pts_spdf@data$MinDist_Market <- MD$MinDist_Market
+rm(MD,MarketNames)
+
+#Distance to Nearest Admin Center
+ProvNames <- pts_spdf@data %>% filter(ProvCenters == 1) %>% pull(Community)
+CenterNames <- c(ProvNames, "San Francisco Ocotelolco", "San Esteban Tizatlan 1", "Quiyahuiztlan", "San Diego Tepeticpac")
+CD = as.data.frame(DistMat[,colnames(DistMat) %in% CenterNames])
+CD <- CD %>% rowwise() %>% mutate( MinDist_Center = min(c_across(`San Francisco Ocotelolco`:`San Diego Tepeticpac`)))
+
+pts_spdf@data$MinDist_Center <- CD$MinDist_Center
+rm(CD,ProvNames,CenterNames)
+
+
+```
+
+
+# Calculate HH Population Density
+
+-households per hectare
+
+```{r}
+Poly$Area_ha <- area(Poly) / 10000
+
+pts_spdf@data$Area_ha <- Poly$Area_ha
+
+pts_spdf@data$TotalHH_per_ha <- pts_spdf@data$TotalHH / pts_spdf@data$Area_ha
+
+pts_spdf@data$Area_ha_per_HH <- pts_spdf@data$Area_ha / pts_spdf@data$TotalHH
+```
+
+
+# Calculate Variables
+
+## Totals and percents
+
+```{r}
+
+Attr$OccuSpecStatus <- paste0(Attr$OccuSpec, Attr$Status)
+Attr$OccuFarm <- ifelse(Attr$OccuSpec == F & Attr$OccuSpecF == T, TRUE, FALSE)
+Attr$OccuFarmStatus <- paste0(Attr$OccuFarm, Attr$Status)
+
+data_long <- Data %>% select(-Cabecera, -TequitlCenter, -TequitlOrd, -Barrios, 
+                             -East, -North, -DoubleCount, -Inns, -Markets, 
+                             -ProvCenters, -WetIrrigAG, -WetlandAG,-IrrigationAG, 
+                             -TemporalAG, -Pop1588, -TotalHH, -Muertos) %>% 
+    pivot_longer(cols = 5:115, names_to = "Title",  values_to = "Count", 
+                 values_drop_na = FALSE) %>% 
+    left_join(Attr, by = "Title")
+
+
+class <- data_long %>% pivot_wider(id_cols = 1:4, names_from = Class, values_from = Count, values_fill = 0, values_fn = sum)
+status <- data_long %>% pivot_wider(id_cols = 1:4, names_from = Status, values_from = Count, values_fill = 0, values_fn = sum)
+demog <- data_long %>% pivot_wider(id_cols = 1:4, names_from = Demog, values_from = Count, values_fill = 0, values_fn = sum)
+trib <- data_long %>% pivot_wider(id_cols = 1:4, names_from = TribStatus, values_from = Count, values_fill = 0, values_fn = sum)
+#Occupational Specialization + Status
+OSS <- data_long %>% pivot_wider(id_cols = 1:4, names_from = OccuSpecStatus, values_from = Count, values_fill = 0, values_fn = sum)
+#Occupation Farmers + Status
+OFS <- data_long %>% pivot_wider(id_cols = 1:4, names_from = OccuFarmStatus, values_from = Count, values_fill = 0, values_fn = sum)
+
+class[125:126,5:6] <- NA
+class$Pop = class$Noble + class$Commoner
+total_population = sum(class$Pop, na.rm = T)
+
+pts_spdf@data <- pts_spdf@data %>% mutate(
+  TotalHH_Obs = class$Pop,
+  NoblesTOT = class$Noble,
+  NoblesTOT_pc = NoblesTOT / TotalHH,
+  CommonerHH = class$Commoner,
+  CommonerHH_pc = CommonerHH / TotalHH,
+  MopilaqueHH = status$Mopilaque,
+  MopilaqueHH_pc = MopilaqueHH / TotalHH,
+  IxtlamaHH = status$Ixtlama,
+  IxtlamaHH_pc = IxtlamaHH / TotalHH,
+  MacehualHH = status$Commoner,
+  MacehualHH_pc = MacehualHH / TotalHH,
+  SlaveHH = status$Slave,
+  SlaveHH_pc = SlaveHH / TotalHH,
+  WidowHH = demog$Widows,
+  WidowHH_pc = WidowHH / TotalHH,
+  WidowerHH = demog$Widowers,
+  WidowerHH_pc = WidowerHH / TotalHH,
+  OldHH = demog$Elderly,
+  OldHH_pc = OldHH / TotalHH,
+  SickHH = demog$Sick,
+  SickHH_pc = SickHH / TotalHH,
+  BlindHH = demog$Blind,
+  BlindHH_pc = BlindHH / TotalHH,
+  PauperHH = demog$Paupers,
+  PauperHH_pc = PauperHH / TotalHH,
+  DisabledHH = demog$Disabled,
+  DisabledHH_pc = DisabledHH / TotalHH,
+  InfirmHH = (SickHH + WidowHH + BlindHH + PauperHH + DisabledHH),
+  InfirmHH_pc = InfirmHH / TotalHH,
+  Nobles_Infirm = trib$ExemptNoble,
+  Nobles_Infirm_pc = Nobles_Infirm / TotalHH,
+  Nobles_Infirm_pc_N = Nobles_Infirm / NoblesTOT,
+  TributaryHH_C = trib$Tributary,
+  TributaryHH_C_pc = TributaryHH_C / TotalHH,
+  TributaryHH_C_pc_C = TributaryHH_C / CommonerHH,
+  NonTributaryHH_C = trib$Exempt,
+  NonTributaryHH_C_pc = NonTributaryHH_C / TotalHH,
+  NonTributaryHH_C_pc_C = NonTributaryHH_C / CommonerHH,
+  FarmerHH = (OFS$TRUEMopilaque + OFS$TRUEIxtlama + OFS$TRUECommoner),
+  FarmerHH_pc = FarmerHH / TotalHH,
+  FarmerHH_pc_C = FarmerHH / CommonerHH,
+  FarmerHH_pc_Tr = FarmerHH / TributaryHH_C,
+  FarmerHH_Mace = OFS$TRUECommoner,
+  FarmerHH_Mace_pc = FarmerHH_Mace / TotalHH,
+  FarmerHH_Mace_pc_C = FarmerHH_Mace / CommonerHH,
+  FarmerHH_Mace_pc_Tr = FarmerHH_Mace / TributaryHH_C,
+  FarmerHH_Ix = OFS$TRUEIxtlama,
+  FarmerHH_Ix_pc = FarmerHH_Ix / TotalHH,
+  FarmerHH_Ix_pc_C = FarmerHH_Ix / CommonerHH,
+  FarmerHH_Ix_pc_Tr = FarmerHH_Ix / TributaryHH_C,
+  FarmerHH_Mop = OFS$TRUEMopilaque,
+  FarmerHH_Mop_pc = FarmerHH_Mop / TotalHH,
+  FarmerHH_Mop_pc_C = FarmerHH_Mop / CommonerHH,
+  FarmerHH_Mop_pc_Tr = FarmerHH_Mop / TributaryHH_C,
+  SpecialistHH = (OSS$TRUENoble + OSS$TRUECommoner + OSS$TRUEIxtlama + OSS$TRUEMopilaque),
+  SpecialistHH_pc = SpecialistHH / TotalHH,
+  SpecialistHH_C = (OSS$TRUECommoner + OSS$TRUEIxtlama + OSS$TRUEMopilaque),
+  SpecialistHH_C_pc = SpecialistHH_C / TotalHH,
+  SpecialistHH_C_pc_C = SpecialistHH_C / CommonerHH,
+  SpecialistHH_C_pc_Tr = SpecialistHH_C / TributaryHH_C,
+  SpecialistHH_N = OSS$TRUENoble,
+  SpecialistHH_N_pc = SpecialistHH_N / TotalHH,
+  SpecialistHH_N_pc_N = SpecialistHH_N / NoblesTOT,
+  SpecialistHH_Mace = OSS$TRUECommoner,
+  SpecialistHH_Mace_pc = SpecialistHH_Mace / TotalHH,
+  SpecialistHH_Mace_pc_C = SpecialistHH_Mace / CommonerHH,
+  SpecialistHH_Mace_pc_Tr = SpecialistHH_Mace / TributaryHH_C,
+  SpecialistHH_Mace_pc_Mace = SpecialistHH_Mace / MacehualHH,
+  SpecialistHH_Ix = OSS$TRUEIxtlama,
+  SpecialistHH_Ix_pc = SpecialistHH_Ix / TotalHH,
+  SpecialistHH_Ix_pc_C = SpecialistHH_Ix / CommonerHH,
+  SpecialistHH_Ix_pc_Tr = SpecialistHH_Ix / TributaryHH_C,
+  SpecialistHH_Ix_pc_Ix = SpecialistHH_Ix / IxtlamaHH,
+  SpecialistHH_Mop = OSS$TRUEMopilaque,
+  SpecialistHH_Mop_pc = SpecialistHH_Mop / TotalHH,
+  SpecialistHH_Mop_pc_C = SpecialistHH_Mop / CommonerHH,
+  SpecialistHH_Mop_pc_Tr = SpecialistHH_Mop / TributaryHH_C,
+  SpecialistHH_Mop_pc_Mop = SpecialistHH_Mop / MopilaqueHH)
+  
+
+pts_spdf@data <- pts_spdf@data %>% rowwise() %>% mutate(
+  DemandWeight = ((NoblesTOT*3)+(MopilaqueHH*2)+(IxtlamaHH*1.5)+
+                    (MacehualHH - InfirmHH)+(OldHH*1)+(WidowHH*0.75)+
+                    ((InfirmHH-WidowHH)*0.4)))
+
+rm(class,status,demog,trib,OSS,OFS)
+```
+
+
+## Patterns
+
+Regional population density gradient exhibits clear core-periphery popdens dist decay
+```{r}
+
+model <- lm(formula = log(TotalHH_per_ha) ~ log(Dist_Ciudad), data = pts_spdf@data[-125,], na.action=na.exclude)
+summary(model)
+
+ggplot(data = pts_spdf@data,aes(x = Dist_Ciudad, y = TotalHH_per_ha)) +
+  geom_point(size=2) +
+  geom_smooth(method = "glm", formula = y~x,method.args = list(family = gaussian()))+
+  scale_x_continuous(trans = log_trans(), breaks = trans_breaks("log", function(x) exp(x)),
+                         labels = trans_format("log", math_format(e^.x))) +
+  scale_y_continuous(trans = log_trans(), breaks = trans_breaks("log", function(x) exp(x)),
+                         labels = trans_format("log", math_format(e^.x))) +
+  labs(x = "Distance to City of Tlaxcala (km)", y = "Pop Density (HH/ha)",
+       title = "Regional Population Density Gradient for Tlaxcala, 1557 (PTSXVI)",
+       subtitle = "Clear Core-Periphery Exponential Popdens Dist Decay") +
+  theme_bw()+
+  theme(plot.title=element_text(hjust = 0.5, size=14, face="bold"),
+        plot.subtitle = element_text(hjust = 0.5, face="bold", size=12),
+        axis.title.x = element_text(color="black", size=12, face="bold"),
+        axis.title.y = element_text(color="black", size=12, face="bold"),
+        axis.text.y = element_text(color="black", size=12),
+        axis.text.x = element_text(color="black", size=12))
+```
+
+
+```{r}
+ggplot(data = pts_spdf@data,aes(x = MinDist_Center, y = TotalHH_per_ha)) +
+  geom_point(size=2) +
+  geom_smooth(method = "glm", formula = y~x,method.args = list(family = gaussian()))+
+  scale_x_continuous(trans = log_trans(), breaks = trans_breaks("log", function(x) exp(x)),
+                         labels = trans_format("log", math_format(e^.x))) +
+  scale_y_continuous(trans = log_trans(), breaks = trans_breaks("log", function(x) exp(x)),
+                         labels = trans_format("log", math_format(e^.x))) +
+  labs(x = "Distance to City of Tlaxcala (km)", y = "Pop Density (HH/ha)",
+       title = "Regional Population Density Gradient for Tlaxcala, 1557 (PTSXVI)",
+       subtitle = "Clear Core-Periphery Exponential Popdens Dist Decay") +
+  theme_bw()+
+  theme(plot.title=element_text(hjust = 0.5, size=14, face="bold"),
+        plot.subtitle = element_text(hjust = 0.5, face="bold", size=12),
+        axis.title.x = element_text(color="black", size=12, face="bold"),
+        axis.title.y = element_text(color="black", size=12, face="bold"),
+        axis.text.y = element_text(color="black", size=12),
+        axis.text.x = element_text(color="black", size=12))
+```
+
+> pairs(pts_spdf@data[,c(23:27,31,32,35,36)], pch = 19)
+> pairs(pts_spdf@data[,c(23, 25:27,31,35,37)], pch = 19)
+> pairs(pts_spdf@data[,c(23, 25:27,32,36,38)], pch = 19)
+
+NoblesTOT + NoblesTOT.pc ~ 
+
+
+
+pairs(pts_spdf@data[,c(23:27,31,32,35,36)], pch = 19)
+SpecialistHH_
+
+Pivot Wider:
+OccuInterp
+OccuGroup
+Sector
+Subsector
+MinDist_Center
+_pc
+
+The same pattern holds for Nobles, albeit a little messier because the number of nobles is more spatially heterogeneous/variable/irregular than population density. 
+
+This can be fixed by either
+--binning the data, or
+--using accessability to nobles
+
+```{r}
+p1 = ggplot(data = pts_spdf@data,aes(x = Dist_Ciudad, y = NoblesTOT)) + geom_point(size=2) + labs(x = "Distance to City of Tlaxcala (km)", y = "Total Nobles") +theme(axis.title.x = element_text(color="black", size=12, face="bold"),
+        axis.title.y = element_text(color="black", size=12, face="bold"))
+p2 = ggplot(data = pts_spdf@data,aes(x = MinDist_Center, y = NoblesTOT)) + geom_point(size=2) + labs(x = "Min Dist to Admin Center (km)", y = "Total Nobles") +theme(axis.title.x = element_text(color="black", size=12, face="bold"),
+        axis.title.y = element_text(color="black", size=12, face="bold"))
+p3 = ggplot(data = pts_spdf@data,aes(x = Dist_TequitlCent, y = NoblesTOT)) + geom_point(size=2) + labs(x = "Dist to Tequitl Center (km)", y = "Total Nobles") +theme(axis.title.x = element_text(color="black", size=12, face="bold"),
+        axis.title.y = element_text(color="black", size=12, face="bold"))
+p4 = ggplot(data = pts_spdf@data,aes(x = MinDist_Market, y = NoblesTOT)) + geom_point(size=2) + labs(x = "Min Dist to Market Center (km)", y = "Total Nobles") +theme(axis.title.x = element_text(color="black", size=12, face="bold"),
+        axis.title.y = element_text(color="black", size=12, face="bold"))
+plot_grid(p1, p2, p3, p4, labels = c('A', 'B', 'C', 'D'))
+
+```
+
+The same holds true for the percentage of Nobles in the population, which is much more significant since we know that the population increases towards the urban core 
+
+```{r}
+p1 = ggplot(data = pts_spdf@data,aes(x = Dist_Ciudad, y = NoblesTOT_pc)) + geom_point(size=2) + labs(x = "Distance to City of Tlaxcala (km)", y = "Percent Nobles") +theme(axis.title.x = element_text(color="black", size=12, face="bold"),
+        axis.title.y = element_text(color="black", size=12, face="bold"))
+p2 = ggplot(data = pts_spdf@data,aes(x = MinDist_Center, y = NoblesTOT_pc)) + geom_point(size=2) + labs(x = "Min Dist to Admin Center (km)", y = "Percent Nobles") +theme(axis.title.x = element_text(color="black", size=12, face="bold"),
+        axis.title.y = element_text(color="black", size=12, face="bold"))
+p3 = ggplot(data = pts_spdf@data,aes(x = Dist_TequitlCent, y = NoblesTOT_pc)) + geom_point(size=2) + labs(x = "Dist to Tequitl Center (km)", y = "Percent Nobles") +theme(axis.title.x = element_text(color="black", size=12, face="bold"),
+        axis.title.y = element_text(color="black", size=12, face="bold"))
+p4 = ggplot(data = pts_spdf@data,aes(x = MinDist_Market, y = NoblesTOT_pc)) + geom_point(size=2) + labs(x = "Min Dist to Market Center (km)", y = "Percent Nobles") +theme(axis.title.x = element_text(color="black", size=12, face="bold"),
+        axis.title.y = element_text(color="black", size=12, face="bold"))
+plot_grid(p1, p2, p3, p4, labels = c('A', 'B', 'C', 'D'))
+
+```
+
+Conversely, the commoner occupational specialist % of Tributaries (those who potentially specialize) has no trend with distance to the urban core, adminsistrative centers or markets
+
+```{r}
+p1 = ggplot(data = pts_spdf@data,aes(x = Dist_Ciudad, y = SpecialistHH_C_pc_Tr)) + geom_point(size=2) + labs(x = "Distance to City of Tlaxcala (km)", y = "Occu Specialist % of Tributaries") +theme(axis.title.x = element_text(color="black", size=12, face="bold"),
+        axis.title.y = element_text(color="black", size=12, face="bold"))
+p2 = ggplot(data = pts_spdf@data,aes(x = MinDist_Center, y = SpecialistHH_C_pc_Tr)) + geom_point(size=2) + labs(x = "Min Dist to Admin Center (km)", y = "Occu Specialist % of Tributaries") +theme(axis.title.x = element_text(color="black", size=12, face="bold"),
+        axis.title.y = element_text(color="black", size=12, face="bold"))
+p3 = ggplot(data = pts_spdf@data,aes(x = Dist_TequitlCent, y = SpecialistHH_C_pc_Tr)) + geom_point(size=2) + labs(x = "Dist to Tequitl Center (km)", y = "Occu Specialist % of Tributaries") +theme(axis.title.x = element_text(color="black", size=12, face="bold"),
+        axis.title.y = element_text(color="black", size=12, face="bold"))
+p4 = ggplot(data = pts_spdf@data,aes(x = MinDist_Market, y = SpecialistHH_C_pc_Tr)) + geom_point(size=2) + labs(x = "Min Dist to Market Center (km)", y = "Occu Specialist % of Tributaries") +theme(axis.title.x = element_text(color="black", size=12, face="bold"),
+        axis.title.y = element_text(color="black", size=12, face="bold"))
+plot_grid(p1, p2, p3, p4, labels = c('A', 'B', 'C', 'D'))
+
+```
+
+Moreover, the commoner occupational specialist % of Tributaries also has no relationship with:
+--Population
+--Pop density
+--Abundance of irrigation/wetland agriculture
+--Estimated Demand
+
+```{r}
+
+p1 = ggplot(data = pts_spdf@data,aes(x = TotalHH, y = SpecialistHH_C_pc_Tr)) + geom_point(size=2) + labs(x = "Population (Total HH)", y = "Occu Specialist % of Tributaries") +theme(axis.title.x = element_text(color="black", size=12, face="bold"),
+        axis.title.y = element_text(color="black", size=12, face="bold"))
+p2 = ggplot(data = pts_spdf@data,aes(x = TotalHH_per_ha, y = SpecialistHH_C_pc_Tr)) + geom_point(size=2) + labs(x = "Pop Density (HH/ha)", y = "Occu Specialist % of Tributaries") +theme(axis.title.x = element_text(color="black", size=12, face="bold"),
+        axis.title.y = element_text(color="black", size=12, face="bold"))
+p3 = ggplot(data = pts_spdf@data,aes(x = WetIrrigAG, y = SpecialistHH_C_pc_Tr)) + geom_point(size=2) + labs(x = "% Hydraulic AG", y = "c") +theme(axis.title.x = element_text(color="black", size=12, face="bold"),
+        axis.title.y = element_text(color="black", size=12, face="bold"))
+p4 = ggplot(data = pts_spdf@data,aes(x = DemandWeight, y = SpecialistHH_C_pc_Tr)) + geom_point(size=2) + labs(x = "Demand Weight Index", y = "Occu Specialist % of Tributaries") +theme(axis.title.x = element_text(color="black", size=12, face="bold"),
+        axis.title.y = element_text(color="black", size=12, face="bold"))
+plot_grid(p1, p2, p3, p4, labels = c('A', 'B', 'C', 'D'))
+
+```
+
+
+
+
+## Concentration / Specialization Metrics
+
+Here we have a few different ways of grouping occupations:
+
+--OccuInterp = Lowest level of aggregation
+
+--OccuGroup = Aggregating by general occupational group
+
+--Subsector = GovtAdmin, GovtTax, AG, Merchant, Construction, UtilManu, LuxManu, 
+Primary, FoodService, ServiceProf, Church, Unknown
+
+--Sector = Govt, Service, AG, Industry, Primary, Unknown
+
+
+Below we calculate their tabular counts:
+
+```{r}
+OccuInterp <- data_long %>% pivot_wider(id_cols = 1:4, names_from = OccuInterp, 
+                                        values_from = Count, values_fill = 0, 
+                                        values_fn = sum) %>%
+    select(-NonSpecialist,-Slaves,-Farmers,-Farmers_M,-Farmers_Ix,-Nobles)
+
+OccuGroup <- data_long %>% pivot_wider(id_cols = 1:4, names_from = OccuGroup, 
+                                        values_from = Count, values_fill = 0, 
+                                        values_fn = sum) %>%
+    select(-NonSpecialist,-Slaves,-Farmers,-Nobles)
+
+Subsector <- data_long %>% pivot_wider(id_cols = 1:4, names_from = Subsector, 
+                                        values_from = Count, values_fill = 0, 
+                                        values_fn = sum) %>%
+    select(-NonSpecialist,-Slave,-Nobles)
+
+Sector <- data_long %>% pivot_wider(id_cols = 1:4, names_from = Sector, 
+                                        values_from = Count, values_fill = 0, 
+                                        values_fn = sum) %>%
+    select(-NonSpecialist,-Nobles)
+```
+
+
+
+
+Belassa / Location Quotient
+
+
+lqs <- locq2(e_ij = G.regions.industries$emp_all, G.regions.industries$ind_code, 
+G.regions.industries$region_code, LQ.output = "df")
+
+
+
+
+
+```{r}
+
+nn <- ncol(pts_spdf@data)+1
+
+OccuInterp <- pts_spdf@data %>% left_join(
+  OccuInterp, by = c("ORD","Community","Tequitl","NameShort")) %>% 
+  pivot_longer(cols = nn:ncol(.), names_to = "Occupation",  
+                 values_to = "Workers", values_drop_na = FALSE) %>% 
+  mutate(presence = ifelse(Workers > 0, 1, 0)) %>% group_by(Community) %>% 
+  mutate(comm_specialists = sum(Workers), #specialists in community
+         diversity = sum(presence),
+         percent_specialists = sum(Workers) / (TributaryHH_C+SpecialistHH_N)) %>% 
+  group_by(Occupation) %>% mutate(
+         occ_specialists = sum(Workers, na.rm = T), #specialists in occupational group
+         ubiquity = sum(presence, na.rm = T)) %>% ungroup %>% 
+  mutate(ES = Workers / comm_specialists, 
+         AA = Workers / occ_specialists, 
+         ES_pop = Workers / TotalHH, 
+         Belassa = (Workers / comm_specialists) / (occ_specialists / total_specialists),
+         Belassa_pop = (Workers / TotalHH) / (occ_specialists / total_population), 
+         SOI = (Workers / occ_specialists) / (TotalHH / total_population), 
+         AAD = (Workers / occ_specialists) / TotalHH, 
+         SD = Workers / TotalHH)
+
+    
+    
+OccuGroup <- data_long %>% pivot_wider(id_cols = 1:4, names_from = OccuGroup, values_from = Count, values_fill = 0, values_fn = sum) %>% select(-NonSpecialist)
+Sector <- data_long %>% pivot_wider(id_cols = 1:4, names_from = Sector, values_from = Count, values_fill = 0, values_fn = sum)
+Subsector <- data_long %>% pivot_wider(id_cols = 1:4, names_from = Subsector, values_from = Count, values_fill = 0, values_fn = sum)
+
+
+
+data_long <- data_long %>% 
+
+total.specialists <- sum(data_long$Workers, na.rm = T)
+
+data_long <- data_long %>% group_by(Community) %>% mutate(
+                      comm.specialists = sum(Workers), #specialists in community
+                      diversity = sum(presence), 
+                      percent.specialists = sum(Workers) / (TributaryHH_C+SpecialistHH_N)) %>% #Casados == Tributaries
+          group_by(Occupation) %>% mutate(
+                      occ.specialists = sum(Workers, na.rm = T), #specialists in occupational group
+                      ubiquity = sum(presence, na.rm = T)) %>% 
+          ungroup %>% mutate(
+                      ES = Workers / comm.specialists, 
+                      AA = Workers / occ.specialists, 
+                      ES_pop = Workers / TotalHH, 
+                      Belassa = (Workers / comm.specialists) / (occ.specialists / total.specialists),
+                      Belassa_pop = (Workers / TotalHH) / (occ.specialists / total.population), 
+                      SOI = (Workers / occ.specialists) / (TotalHH / total.population), 
+                      AAD = (Workers / occ.specialists) / TotalHH, SD = Workers / TotalHH) %>%  
+          filter(Belassa > 0) %>% mutate(
+                      log.Belassa = log(Belassa), 
+                      log.AA = log(AA), 
+                      log.ES = log(ES), 
+                      log.ES_pop = log(ES_pop), 
+                      log.Belassa_pop = log(Belassa_pop), 
+                      log.SOI = log(SOI), 
+                      log.AAD = log(AAD), 
+                      log.SD = log(SD))
+```
+
+OccuMetrics = function(base_data = pts_spdf@data,       # sp package SPDF class object
+                       occu_data = OccuInterp,
+                       join_vars = c("ORD","Community","Tequitl","NameShort")
+                       ){
+  
+  nn <- ncol(base_data)+1
+  
+  tmp <- base_data %>% left_join(occu_data, by = join_vars) %>% 
+    pivot_longer(cols = nn:ncol(.), names_to = "Occupation",  
+                   values_to = "Workers", values_drop_na = FALSE) %>% 
+    mutate(presence = ifelse(Workers > 0, 1, 0)) %>% group_by(Community) %>% 
+    mutate(comm_specialists = sum(Workers), #specialists in community
+           diversity = sum(presence),
+           percent_specialists = sum(Workers) / (TributaryHH_C+SpecialistHH_N)) %>% 
+    group_by(Occupation) %>% mutate(
+           occ_specialists = sum(Workers, na.rm = T), #specialists in occupational group
+           ubiquity = sum(presence, na.rm = T)) %>% ungroup %>% 
+    mutate(ES = Workers / comm_specialists, 
+           AA = Workers / occ_specialists, 
+           ES_pop = Workers / TotalHH, 
+           Belassa = (Workers / comm_specialists) / (occ_specialists / total_specialists),
+           Belassa_pop = (Workers / TotalHH) / (occ_specialists / total_population), 
+           SOI = (Workers / occ_specialists) / (TotalHH / total_population), 
+           AAD = (Workers / occ_specialists) / TotalHH, 
+           SD = Workers / TotalHH)
+  
+  y <-list() #temp storage list
+  
+  num = which( colnames(spdata@data)==paste(attr)) 
+  
+  ATTRS <- as.character(unique(spdata[[num]]))
+  
+  outnames <- paste0(prefix,ATTRS,suffix)
+  
+  for (i in 1:length(ATTRS)) {
+    tmp <- spdata[spdata[[num]] == ATTRS[i], ]
+    y[[i]] <- tmp
+    
+    if (export == T){
+      dirpath = ifelse(is.na(dirpath), getwd(), dirpath)
+      writeOGR(tmp, paste0(outnames[i],".gpkg"), paste0(outnames[i]), 
+               driver = "GPKG", overwrite_layer=TRUE)
+    }
+    
+  }
+  
+  names(y) <- outnames
+  return(y)
+  
+}
+
+```{r}
+MH_counts <- data_long %>% dplyr::select(-presence, -occ.specialists, -ubiquity, -ES, -AA, -ES_pop, -Belassa, -Belassa_pop, -SOI, -AAD, -SD, -log.Belassa, -log.AA, -log.ES, -log.ES_pop, -log.Belassa_pop, -log.SOI, -log.AAD, -log.SD) %>%    spread(Occupation, Workers) %>% distinct %>% arrange(Community)
+MH_counts_spdf <- MH_counts
+coordinates(MH_counts_spdf) <- c("East", "North")
+
+MH_ES <- data_long %>% dplyr::select(-presence, -occ.specialists, -ubiquity, -Workers, -AA, -ES_pop, -Belassa, -Belassa_pop, -SOI, -AAD, -SD, -log.Belassa, -log.AA, -log.ES, -log.ES_pop, -log.Belassa_pop, -log.SOI, -log.AAD, -log.SD) %>%   spread(Occupation, ES) %>% distinct %>% arrange(Community)
+MH_ES_spdf <- MH_ES
+coordinates(MH_ES_spdf) <- c("East", "North")
+
+MH_AA <- data_long %>% dplyr::select(-presence, -occ.specialists, -ubiquity, -Workers, -ES, -ES_pop, -Belassa, -Belassa_pop, -SOI, -AAD, -SD, -log.Belassa, -log.AA, -log.ES, -log.ES_pop, -log.Belassa_pop, -log.SOI, -log.AAD, -log.SD) %>%   spread(Occupation, AA) %>% distinct %>% arrange(Community)
+MH_AA_spdf <- MH_AA
+coordinates(MH_AA_spdf) <- c("East", "North")
+
+MH_Belassa <- data_long %>% dplyr::select(-presence, -occ.specialists, -ubiquity, -Workers, -ES, -ES_pop, -AA, -Belassa_pop, -SOI, -AAD, -SD, -log.Belassa, -log.AA, -log.ES, -log.ES_pop, -log.Belassa_pop, -log.SOI, -log.AAD, -log.SD) %>%   spread(Occupation, Belassa) %>% distinct %>% arrange(Community)
+MH_Belassa_spdf <- MH_Belassa
+coordinates(MH_Belassa_spdf) <- c("East", "North")
+
+MH_Belassa_pop <- data_long %>% dplyr::select(-presence, -occ.specialists, -ubiquity, -Workers, -ES, -ES_pop, -AA, -Belassa, -SOI, -AAD, -SD, -log.Belassa, -log.AA, -log.ES, -log.ES_pop, -log.Belassa_pop, -log.SOI, -log.AAD, -log.SD) %>%   spread(Occupation, Belassa_pop) %>% distinct %>% arrange(Community)
+MH_Belassa_pop_spdf <- MH_Belassa_pop
+coordinates(MH_Belassa_pop_spdf) <- c("East", "North")
+
+MH_SOI <- data_long %>% dplyr::select(-presence, -occ.specialists, -ubiquity, -Workers, -ES, -ES_pop, -AA, -Belassa, -Belassa_pop, -AAD, -SD, -log.Belassa, -log.AA, -log.ES, -log.ES_pop, -log.Belassa_pop, -log.SOI, -log.AAD, -log.SD) %>%   spread(Occupation, SOI) %>% distinct %>% arrange(Community)
+MH_SOI_spdf <- MH_SOI
+coordinates(MH_SOI_spdf) <- c("East", "North")
+
+MH_SD <- data_long %>% dplyr::select(-presence, -occ.specialists, -ubiquity, -Workers, -ES, -ES_pop, -AA, -Belassa, -Belassa_pop, -AAD, -SOI, -log.Belassa, -log.AA, -log.ES, -log.ES_pop, -log.Belassa_pop, -log.SOI, -log.AAD, -log.SD) %>%   spread(Occupation, SD) %>% distinct %>% arrange(Community)
+MH_SD_spdf <- MH_SD
+coordinates(MH_SD_spdf) <- c("East", "North")
+```
+
+
+
+## Accessibility
+
+--nobles
+--nobles density
+--total pop
+--pop density
+--weighted by status
+nobles = 3
+mopilaque = 2
+ixtlama = 2
+macehualli + old men = 1
+WidowHH, WidowerHH = 0.75
+SickHH, BlindHH, PaupersHH, DisabledHH, Slaves = 0.4
+--weighted status density
+
+
+```{r}
+
+lctools::acc(X, Y, Pop, Power=1)
+SpatialAcc::ac(p, n, D, d0, power=2, family="SAM")
+REAT::hansen(od_dataset, origins, destinations, attrac, dist, gamma = 1, lambda =-2, atype = "pow", dtype = "pow", gamma2 = NULL, lambda2 = NULL, dist_const = 0, dist_max = NULL, extract_local = FALSE, accnorm = FALSE, check_df = TRUE, print.results = TRUE)
+```
+
+X = a numeric vector of x coordinates
+Y = a numeric vector of y coordinates
+Pop = a numeric vector of the weights, usually a population variable
+Power = a power of the distance; default is 1
+
+
+Distance-based measures of accessibility and proximity using individual point-level data
+
+One popular indicator of accessibility is the Hansen accessibility, developed by Hansen (1959) in the context of land use theory. The basic idea is that “accessibility” equals the sum of opportunities outgoing from a specific origin i. These opportunities are spread over a set of m locations (j = 1,...,m). The summation is weighted with the distance between i and the j-th location. This distance, no matter how measured (e.g. street distance, Euclidean distance, driving time) is assumed to be perceived in a nonlinear way, which is operationalized by a nonlinear distance decay function (a.k.a. distance impedance function or response function), e.g. power, exponential or logistic. A similar concept was introduced by Harris (1954) attempting to model the market potential of locations. If we replace the inverse distance weighting in the Harris indicator with another type of distance weighting, we see that both concepts are mathematically equivalent. The only difference is that the Harris indicator is conceptualized from the supplier’s perspective j (e.g. market potential of a retail store) and the Hansen accessibility takes the demand location i as a starting point (Pooler, 1987; Reggiani et al., 2011). As these indicators are dimensionless and range from zero to infinity, a normalization with a range from zero to one can be computed by weighting the results with the opportunities without distance correction.
+
+
+## Focal Location Quotient
+
+FLQ(Coords, Bandwidth, e, E, Denominator, WType = "Bi-square")
+
+
+Spatial Gini coefficient
+
+spGini(Coords, Bandwidth, x, WType = 'Binary')
+
+
+Another type of specialization/concentration indicator was introduced by Krugman (1991), originally designed for comparing the specialization of two regions. An extension of this indicator was established by Midelfart-Knarvik et al. (2000) for the comparison of regional specialization/industry concentration with respect to the sum or mean of all regions/industries (furthermore used e.g. by Haas, Südekum 2005; Vogiatzoglou 2006). Unlike the Gini- or Hoover-type measures, the Krugman coefficients range between zero (no specialization/concentration) and two (total specialization/concentration).
+
+The cluster index developed by Litzenberger, Sternberg (2006) goes beyond employment data and includes additional information about the industry-specific firm size, population density and region size. It is composed of three parts: the relative industrial stock with respect to industry i and region j, ISij, the relative industrial density, IDij, and the relative firm size, PSij. All three components are modified location quotients. This is done to control for small and monostructural regions, which are identified as clusters otherwise (which is a problem in the original LQ). The cluster index CIij has a potential range from zero to infinity. This extended indicator is used e.g. by Hoffmann et al. (2017) for the German food processing industry.
+
+Coefficients of agglomeration and coagglomeration using individual firm data
+
+The cluster indicators by Ellison, Glaeser (1997) compare the empirical distribution of firms to an arbitrary location pattern where agglomeration economies are absent (often referred to as a dartboard approach). Ellison, Glaeser (1997) differentiate between the clustering of firms from one industry (agglomeration) due to localization economies and the clustering of multiple industries (coagglomeration) due to urbanization economies. Their indices also take into account the industry-specific structure of the firms by including the Herfindahl-Hirschman index, HHIi, for the employment concentration in industry i. This is the reason why individual firm-level data is required for the computation. The Herfindahl-Hirschman indicator is included to control the raw measures of spatial concentration, Gi and G, for firm employment concentration, which occurs especially when there are just a few firms with many employees. The Ellison-Glaeser (EG) index for agglomeration, γi, is designed for identifying the clustering of industry i, while the coagglomeration index, γc aims at the clustering of a set of U industries, where U ≤ I. Values of γ equal to zero imply the absence of agglomeration economies, while values above zero indicate positive effects due to spatial clustering. When γ is negative, firm locations are less spatially concentrated than expected on condition of the dartboard approach, which indicates negative agglomeration economies. The EG index is used in several current regional economic studies (e.g. Dauth et al. 2015, 2018; Yamamura, Goto 2018).
+
+In contrast, Howard et al. (2016) argue that agglomeration economies should not be analyzed regarding employment but the firms itself. Their colocation index, CLab, sums the colocation of Ki and Kq firms from two industries, i and q, controlling for all possible combinations. This colocation measure is compared to a counterfactual location structure constructed via bootstrapping; specifically the arithmetic mean of a number of (e.g. 50) random assignments of the regarded firms to the locations. The value of the resulting excess colocation index, XCLab, ranges between -1 and 1.
+
+TribNonRenterHH
+TribRenterHH
+CantSeeTrib
+NonTribRenterHH
+RenterTotalHH
+RunawayHH
+Deaths
+WidowerHH
+WidowHH
+OldHH
+OldWidowHH
+SickHH
+SickDeadHH
+
+Specialists.NR
+Specialists.R
+
+Farmers.NR
+Farmers.R
+
+
+
+Streams <- readOGR(paste0(wd$data_r,"Streams.gpkg"))
+
+df <- data.frame(place = "London", 
+       lat = 51.5074, lon = 0.1278,
+       population = 8500000) # just to add some value that is plotable
+projcrs <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
+df <- st_as_sf(x = df,                         
+           coords = c("lon", "lat"),
+           crs = projcrs)
+
+
+## Hillshade Basemap
+#Hillshade <- raster(paste0(wd$data_r, "Hillshade_PueblaTlaxcala.tif"))
+#Hillshade <- rast(Hillshade, crs = 32614)
+#Hillshade.s <- st_as_stars(Hillshade) #for ggplot basemap
+
+# read in 30m DEM and convert the CRS to the same as spatial points dataframe
+#DEM <- raster(paste0(wd$data_r, "SRTM_30m_DEM_PueblaTlaxcala2.tif"))
+#DEM <- projectRaster(DEM, crs = 32614)
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+ggplot() +geom_stars(data = Hillshade.s)
+```
+
+
+
+1) Core Settlement vars and coords
+2) to spdf/sf
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

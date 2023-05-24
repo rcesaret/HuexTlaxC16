@@ -1,0 +1,211 @@
+---
+title: "Sectors & Industries"
+author: "Rudolf Cesaretti"
+date: "2023-03-05"
+output: html_document
+---
+
+
+```{r, setup, include=FALSE,echo=FALSE, message=FALSE,warning=FALSE}
+require(knitr)
+# Set so that long lines in R will be wrapped:
+opts_chunk$set(tidy.opts=list(width.cutoff=75),tidy=TRUE)
+#
+rm(list = ls())
+```
+
+
+
+# Setup 
+
+All of the data and scripts are downloadable from the [new ASU SettlementPersist2022 github repository](https://https://github.com/rcesaret/ASUSettlementPersist2022), which can be downloaded locally as a .zip folder or cloned to your own account.
+
+Either way, once you have done so, you will need to modify the working directory (setwd("C:/...)") path and "dir" variables in the code chunk below to match the repository location on your computer.
+
+```{r, label='Set Local Directory Location', message=FALSE,warning=FALSE}
+
+wd <- list()
+
+#SET YOUR LOCAL DIRECTORY LOCATION HERE:
+#wd$dir <- "C:/Users/rcesaret/Dropbox (ASU)/Huexotzinco/HuexTlaxAnal2022/HuexTlax2022Analysis/"
+wd$dir <- "C:/Users/TJ McMote/Dropbox (ASU)/Huexotzinco/HuexTlaxAnal2022/HuexTlax2022Analysis/"
+
+wd$analysis <- paste0(wd$dir,"analysis/")
+wd$data_r <- paste0(wd$dir,"data-raw/")
+wd$data_p <- paste0(wd$dir,"data-processed/")
+wd$data_f <- paste0(wd$dir,"data-final-outputs/")
+wd$figs <- paste0(wd$dir,"figures/")
+wd$funcs <- paste0(wd$dir,"functions/")
+
+```
+
+
+## Load R Packages and Custom Functions
+
+```{r, label='Load Libraries', message=FALSE,warning=FALSE}
+# Package names
+packages <- c("rgdal", "sp", "sf", "GISTools", "lwgeom", "tidyverse", "tidyr", 
+              "data.table", "zoo", "scales", "sjmisc")
+              
+              #, "data.table",  "mgcv","igraph", "ggrepel","ggridges", "movecost",  "datplot", "scales",
+
+# Install packages not yet installed
+installed_packages <- packages %in% rownames(installed.packages())
+if (any(installed_packages == FALSE)) {
+  install.packages(packages[!installed_packages])
+}
+
+# load packages
+invisible(lapply(packages, library, character.only = TRUE))
+
+rm(packages,installed_packages)
+
+#Read in custom R functions located in the wd$funcs directory folder
+#FUNCS <- list("splitByAttributes.R", "RS_Acoef.R", "PopAreaResids.R", "LQ.R", "GiniSp.R")
+#invisible(lapply(FUNCS, function(x) source(paste0(wd$funcs,x))))
+#rm(FUNCS)
+
+```
+
+
+```{r, label='Import Data', message=FALSE,warning=FALSE}
+
+# Read-in the data
+MH_Settlements <- read.csv(paste0(wd$data_r,"MH_Settlements.csv"))
+MH_Occu <- read.csv(paste0(wd$data_r,"MH_Occu.csv"))
+MH_Attr <- read.csv(paste0(wd$data_r,"MH_Attr.csv"), na.strings	= "")
+
+#Poly <- readOGR(paste0(wd$data_r,"SBOMPoly.gpkg"))
+
+```
+
+
+```{r}
+
+#MH_SD <- left_join(MH_Settlements, MH_Data, by=c('ORD'='ORD', 'Name'='Name'))
+
+MH_Occu_long <- MH_Occu %>% pivot_longer(cols = OldFarm_T:CantSeeIfOccu_U,
+  names_to = "Variable", values_to = "Count") %>% filter(Count != 0) %>% 
+  left_join(MH_Attr, by="Variable")
+
+MH_Occu_long_Totals <- MH_Occu_long %>% filter(Status == "Total")
+
+MH_Occu_long_NoTotals <- MH_Occu_long %>% filter(Status != "Total")
+
+### Add total columns for every variable??? (Nobles, infirm demog, etc.)
+
+
+```
+
+# Counts for Sectors, Subsectors and Industries
+
+IMPORTANT: These need STATUSES (T F R U)
+
+```{r}
+
+## Counts for Sectors3
+
+Sect3_Tot = MH_Occu_long_NoTotals %>% group_by(Name, Sectors3) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Sectors3)) %>% pivot_wider(id_cols=Name, names_from = Sectors3, names_prefix = "Sect3_Tot_", values_from = Count, values_fill = 0)
+
+Sect3_Tot_NoPix = MH_Occu_long_NoTotals %>% filter(Occupation != "CenPix") %>% filter(Occupation != "MacPix") %>% group_by(Name, Sectors3) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Sectors3)) %>% pivot_wider(id_cols=Name, names_from = Sectors3, names_prefix = "Sect3_Tot_NoPix_", values_from = Count, values_fill = 0)
+
+Sect3_Trib = MH_Occu_long_NoTotals %>% filter(Trib == "Tributary") %>% group_by(Name, Sectors3) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Sectors3)) %>% pivot_wider(id_cols=Name, names_from = Sectors3, names_prefix = "Sect3_Trib_", values_from = Count, values_fill = 0)
+
+Sect3_Trib_NoPix = MH_Occu_long_NoTotals %>% filter(Trib == "Tributary") %>% filter(Occupation != "CenPix") %>% filter(Occupation != "MacPix") %>% group_by(Name, Sectors3) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Sectors3)) %>% pivot_wider(id_cols=Name, names_from = Sectors3, names_prefix = "Sect3_Trib_NoPix_", values_from = Count, values_fill = 0)
+
+## Counts for Sectors4
+
+Sect4_Tot = MH_Occu_long_NoTotals %>% group_by(Name, Sectors4) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Sectors4)) %>% pivot_wider(id_cols=Name, names_from = Sectors4, names_prefix = "Sect4_Tot_", values_from = Count, values_fill = 0)
+
+Sect4_Tot_NoPix = MH_Occu_long_NoTotals %>% filter(Occupation != "CenPix") %>% filter(Occupation != "MacPix") %>% group_by(Name, Sectors4) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Sectors4)) %>% pivot_wider(id_cols=Name, names_from = Sectors4, names_prefix = "Sect4_Tot_NoPix_", values_from = Count, values_fill = 0)
+
+Sect4_Trib = MH_Occu_long_NoTotals %>% filter(Trib == "Tributary") %>% group_by(Name, Sectors4) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Sectors4)) %>% pivot_wider(id_cols=Name, names_from = Sectors4, names_prefix = "Sect4_Trib_", values_from = Count, values_fill = 0)
+
+Sect4_Trib_NoPix = MH_Occu_long_NoTotals %>% filter(Trib == "Tributary") %>% filter(Occupation != "CenPix") %>% filter(Occupation != "MacPix") %>% group_by(Name, Sectors4) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Sectors4)) %>% pivot_wider(id_cols=Name, names_from = Sectors4, names_prefix = "Sect4_Trib_NoPix_", values_from = Count, values_fill = 0)
+
+## Counts for Sectors3b
+
+Sect3b_Tot = MH_Occu_long_NoTotals %>% group_by(Name, Sectors3b) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Sectors3b)) %>% pivot_wider(id_cols=Name, names_from = Sectors3b, names_prefix = "Sect3b_Tot_", values_from = Count, values_fill = 0)
+
+Sect3b_Tot_NoPix = MH_Occu_long_NoTotals %>% filter(Occupation != "CenPix") %>% filter(Occupation != "MacPix") %>% group_by(Name, Sectors3b) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Sectors3b)) %>% pivot_wider(id_cols=Name, names_from = Sectors3b, names_prefix = "Sect3b_Tot_NoPix_", values_from = Count, values_fill = 0)
+
+Sect3b_Trib = MH_Occu_long_NoTotals %>% filter(Trib == "Tributary") %>% group_by(Name, Sectors3b) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Sectors3b)) %>% pivot_wider(id_cols=Name, names_from = Sectors3b, names_prefix = "Sect3b_Trib_", values_from = Count, values_fill = 0)
+
+Sect3b_Trib_NoPix = MH_Occu_long_NoTotals %>% filter(Trib == "Tributary") %>% filter(Occupation != "CenPix") %>% filter(Occupation != "MacPix") %>% group_by(Name, Sectors3b) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Sectors3b)) %>% pivot_wider(id_cols=Name, names_from = Sectors3b, names_prefix = "Sect3b_Trib_NoPix_", values_from = Count, values_fill = 0)
+
+## Counts for Sectors4b
+
+Sect4b_Tot = MH_Occu_long_NoTotals %>% group_by(Name, Sectors4b) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Sectors4b)) %>% pivot_wider(id_cols=Name, names_from = Sectors4b, names_prefix = "Sect4b_Tot_", values_from = Count, values_fill = 0)
+
+Sect4b_Tot_NoPix = MH_Occu_long_NoTotals %>% filter(Occupation != "CenPix") %>% filter(Occupation != "MacPix") %>% group_by(Name, Sectors4b) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Sectors4b)) %>% pivot_wider(id_cols=Name, names_from = Sectors4b, names_prefix = "Sect4b_Tot_NoPix_", values_from = Count, values_fill = 0)
+
+Sect4b_Trib = MH_Occu_long_NoTotals %>% filter(Trib == "Tributary") %>% group_by(Name, Sectors4b) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Sectors4b)) %>% pivot_wider(id_cols=Name, names_from = Sectors4b, names_prefix = "Sect4b_Trib_", values_from = Count, values_fill = 0)
+
+Sect4b_Trib_NoPix = MH_Occu_long_NoTotals %>% filter(Trib == "Tributary") %>% filter(Occupation != "CenPix") %>% filter(Occupation != "MacPix") %>% group_by(Name, Sectors4b) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Sectors4b)) %>% pivot_wider(id_cols=Name, names_from = Sectors4b, names_prefix = "Sect4b_Trib_NoPix_", values_from = Count, values_fill = 0)
+
+## Counts for Subsectors
+
+SubSect_Tot = MH_Occu_long_NoTotals %>% group_by(Name, Subsector) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Subsector)) %>% pivot_wider(id_cols=Name, names_from = Subsector, names_prefix = "SubSect_Tot_", values_from = Count, values_fill = 0)
+
+SubSect_Tot_NoPix = MH_Occu_long_NoTotals %>% filter(Occupation != "CenPix") %>% filter(Occupation != "MacPix") %>% group_by(Name, Subsector) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Subsector)) %>% pivot_wider(id_cols=Name, names_from = Subsector, names_prefix = "SubSect_Tot_NoPix_", values_from = Count, values_fill = 0)
+
+SubSect_Trib = MH_Occu_long_NoTotals %>% filter(Trib == "Tributary") %>% group_by(Name, Subsector) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Subsector)) %>% pivot_wider(id_cols=Name, names_from = Subsector, names_prefix = "SubSect_Trib_", values_from = Count, values_fill = 0)
+
+SubSect_Trib_NoPix = MH_Occu_long_NoTotals %>% filter(Trib == "Tributary") %>% filter(Occupation != "CenPix") %>% filter(Occupation != "MacPix") %>% group_by(Name, Subsector) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Subsector)) %>% pivot_wider(id_cols=Name, names_from = Subsector, names_prefix = "SubSect_Trib_NoPix_", values_from = Count, values_fill = 0)
+
+## Counts for Industries
+
+Industry_Tot = MH_Occu_long_NoTotals %>% group_by(Name, Industry) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Industry)) %>% pivot_wider(id_cols=Name, names_from = Industry, names_prefix = "Industry_Tot_", values_from = Count, values_fill = 0)
+
+Industry_Tot_NoPix = MH_Occu_long_NoTotals %>% filter(Occupation != "CenPix") %>% filter(Occupation != "MacPix") %>% group_by(Name, Industry) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Industry)) %>% pivot_wider(id_cols=Name, names_from = Industry, names_prefix = "Industry_Tot_NoPix_", values_from = Count, values_fill = 0)
+
+Industry_Trib = MH_Occu_long_NoTotals %>% filter(Trib == "Tributary") %>% group_by(Name, Industry) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Industry)) %>% pivot_wider(id_cols=Name, names_from = Industry, names_prefix = "Industry_Trib_", values_from = Count, values_fill = 0)
+
+Industry_Trib_NoPix = MH_Occu_long_NoTotals %>% filter(Trib == "Tributary") %>% filter(Occupation != "CenPix") %>% filter(Occupation != "MacPix") %>% group_by(Name, Industry) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Industry)) %>% pivot_wider(id_cols=Name, names_from = Industry, names_prefix = "Industry_Trib_NoPix_", values_from = Count, values_fill = 0)
+
+
+```
+
+
+```{r}
+
+SectInd_Tot
+
+
+x = Sect3_Tot %>% left_join(Sect4_Tot, by = "Name") %>% left_join(Sect3b_Tot, by = "Name") %>%
+  left_join(Sect4b_Tot, by = "Name") %>% left_join(SubSect_Tot, by = "Name") %>%
+  left_join(Industry_Tot, by = "Name") %>% left_join(Sect3_Tot_NoPix, by = "Name") %>%
+  left_join(Sect4_Tot_NoPix, by = "Name") %>% left_join(Sect3b_Tot_NoPix, by = "Name") %>%
+  left_join(Sect4b_Tot_NoPix, by = "Name") %>% left_join(SubSect_Tot_NoPix, by = "Name") %>%
+  left_join(Industry_Tot_NoPix, by = "Name") %>% 
+  left_join(Sect3_Trib, by = "Name") %>% left_join(Sect4_Trib, by = "Name") %>%
+  left_join(Sect3b_Trib, by = "Name") %>% left_join(Sect4b_Trib, by = "Name") %>%
+  left_join(SubSect_Trib, by = "Name") %>% left_join(Industry_Trib, by = "Name") %>%
+  left_join(Sect3_Trib_NoPix, by = "Name") %>% left_join(Sect3b_Trib_NoPix, by = "Name") %>%
+  left_join(Sect4_Trib_NoPix, by = "Name") %>% left_join(Sect4b_Trib_NoPix, by = "Name") %>%
+  left_join(SubSect_Trib_NoPix, by = "Name") %>% left_join(Industry_Trib_NoPix, by = "Name") #%>%
+  #left_join(XXXXX, by = "Name") %>% left_join(XXXXX, by = "Name") %>%
+  #left_join(XXXXX, by = "Name") %>% left_join(XXXXX, by = "Name") %>%
+  #left_join(XXXXX, by = "Name") %>% left_join(XXXXX, by = "Name") %>%
+  #left_join(XXXXX, by = "Name") %>% left_join(XXXXX, by = "Name") %>%
+  #left_join(XXXXX, by = "Name") %>% left_join(XXXXX, by = "Name") %>%
+  #left_join(XXXXX, by = "Name") %>% left_join(XXXXX, by = "Name") %>%
+  #left_join(XXXXX, by = "Name") %>% left_join(XXXXX, by = "Name") %>%
+  #left_join(XXXXX, by = "Name") %>% left_join(XXXXX, by = "Name") %>%
+  #left_join(XXXXX, by = "Name") %>% left_join(XXXXX, by = "Name") %>%
+  #left_join(XXXXX, by = "Name") %>% left_join(XXXXX, by = "Name") %>%
+  #left_join(XXXXX, by = "Name") %>% left_join(XXXXX, by = "Name")
+
+#x[is.na(x)] <- 0
+
+MH_Occu <- MH_Occu %>% left_join(x, by = "Name") 
+
+```
+  
+  
+```{r}
+rm(Sect3_Tot, Sect3_Tot_NoPix, Sect3_Trib, Sect3_Trib_NoPix, Sect4_Tot, Sect4_Tot_NoPix, Sect4_Trib, Sect4_Trib_NoPix, 
+Sect3b_Tot, Sect3b_Tot_NoPix, Sect3b_Trib, Sect3b_Trib_NoPix, Sect4b_Tot, Sect4b_Tot_NoPix, Sect4b_Trib, Sect4b_Trib_NoPix, SubSect_Tot, SubSect_Tot_NoPix, SubSect_Trib, SubSect_Trib_NoPix, Industry_Tot, Industry_Tot_NoPix, Industry_Trib, Industry_Trib_NoPix, x)
+```
+
+	GovtChurchDemand	SpanishDemand	NobleDemand	LuxuryDemand	UtilDemand

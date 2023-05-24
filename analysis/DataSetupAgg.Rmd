@@ -1,0 +1,784 @@
+---
+title: "Untitled"
+author: "Rudolf Cesaretti"
+date: "2023-03-07"
+output: html_document
+---
+
+
+```{r, setup, include=FALSE,echo=FALSE, message=FALSE,warning=FALSE}
+require(knitr)
+# Set so that long lines in R will be wrapped:
+opts_chunk$set(tidy.opts=list(width.cutoff=75),tidy=TRUE)
+#
+rm(list = ls())
+```
+
+
+
+# Setup 
+
+All of the data and scripts are downloadable from the [new ASU SettlementPersist2022 github repository](https://https://github.com/rcesaret/ASUSettlementPersist2022), which can be downloaded locally as a .zip folder or cloned to your own account.
+
+Either way, once you have done so, you will need to modify the working directory (setwd("C:/...)") path and "dir" variables in the code chunk below to match the repository location on your computer.
+
+```{r, label='Set Local Directory Location', message=FALSE,warning=FALSE}
+
+wd <- list()
+
+#SET YOUR LOCAL DIRECTORY LOCATION HERE:
+#wd$dir <- "C:/Users/rcesaret/Dropbox (ASU)/Huexotzinco/HuexTlaxAnal2022/HuexTlax2022Analysis/"
+wd$dir <- "C:/Users/TJ McMote/Dropbox (ASU)/Huexotzinco/HuexTlaxAnal2022/HuexTlax2022Analysis/"
+
+wd$analysis <- paste0(wd$dir,"analysis/")
+wd$data_r <- paste0(wd$dir,"data-raw/")
+wd$data_p <- paste0(wd$dir,"data-processed/")
+wd$data_f <- paste0(wd$dir,"data-final-outputs/")
+wd$figs <- paste0(wd$dir,"figures/")
+wd$funcs <- paste0(wd$dir,"functions/")
+
+```
+
+
+## Load R Packages and Custom Functions
+
+```{r, label='Load Libraries', message=FALSE,warning=FALSE}
+# Package names
+packages <- c("rgdal", "sp", "sf", "GISTools", "lwgeom", "tidyverse", "tidyr", 
+              "data.table", "zoo", "scales", "sjmisc", "REAT")
+              
+              #, "data.table",  "mgcv","igraph", "ggrepel","ggridges", "movecost",  "datplot", "scales",
+
+# Install packages not yet installed
+installed_packages <- packages %in% rownames(installed.packages())
+if (any(installed_packages == FALSE)) {
+  install.packages(packages[!installed_packages])
+}
+
+# load packages
+invisible(lapply(packages, library, character.only = TRUE))
+
+rm(packages,installed_packages)
+
+#Read in custom R functions located in the wd$funcs directory folder
+#FUNCS <- list("splitByAttributes.R", "RS_Acoef.R", "PopAreaResids.R", "LQ.R", "GiniSp.R")
+#invisible(lapply(FUNCS, function(x) source(paste0(wd$funcs,x))))
+#rm(FUNCS)
+
+```
+
+
+```{r, label='Import Data', message=FALSE,warning=FALSE}
+
+# Read-in the data
+MH_Settlements <- read.csv(paste0(wd$data_r,"MH_Settlements.csv"))
+MH_Occu <- read.csv(paste0(wd$data_r,"MH_Occu.csv"))
+MH_Attr <- read.csv(paste0(wd$data_r,"MH_Attr.csv"), na.strings	= "")
+
+
+#MH_Poly <- st_read(paste0(wd$data_r,"MH_Poly.gpkg")) %>% rename(AggZone_ID = id, AggZone = Name)
+```
+
+
+```{r}
+MH_Agg = MH_Settlements %>% select( -East, -North, -ORD, -AggZoneNumConserv, -ConservAgg_East, -ConservAgg_North, -AggZone_fid) %>% left_join(MH_Occu, by = "Name") %>% group_by(AggZone_ID, AggZone) %>% summarise_if(is.numeric, sum) %>% ungroup() %>% select(-ORD)
+
+MH_Agg_long <- MH_Agg %>% pivot_longer(cols = OldFarm_T:CantSeeIfOccu_U,
+  names_to = "Variable", values_to = "Count") %>% filter(Count != 0) %>% 
+  mutate(presence = ifelse(Count > 0, 1, 0)) %>% 
+  left_join(MH_Attr, by="Variable")
+
+MH_Occu_long <- MH_Occu %>% pivot_longer(cols = OldFarm_T:CantSeeIfOccu_U,
+  names_to = "Variable", values_to = "Count") %>% filter(Count != 0) %>% 
+  left_join(MH_Attr, by="Variable")
+#MH_Occu_long_Totals <- MH_Occu_long %>% filter(Status == "Total")
+
+#MH_Occu_long_NoTotals <- MH_Occu_long %>% filter(Status != "Total")
+
+```
+
+
+
+
+# Calculate Macro Demog/Econ/Class Counts and Percents
+
+
+```{r}
+## Total CNpicto Pop Head Count (including attached/dependent noblewomen)
+
+TotalCount = MH_Agg_long %>% filter(Demog != "Runaway") %>% filter(Demog != "Dead") %>% 
+  group_by(AggZone, Suffix2) %>% summarise(TotalCount = sum(Count)) %>% ungroup() %>% 
+  group_by(AggZone) %>% mutate(Totals = max(TotalCount)) %>% ungroup() %>% 
+  mutate(PctTotalCount = TotalCount / Totals) 
+
+PctTotalCount <- TotalCount %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "PctTotalCount_", values_from = PctTotalCount, values_fill = 0) %>% 
+  select(-PctTotalCount_T)
+
+TotalCount <- TotalCount %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "TotalCount_", values_from = TotalCount, values_fill = 0) %>% 
+  left_join(PctTotalCount, by = "AggZone")
+
+rm(PctTotalCount)
+
+## Heads of Household
+
+TotalHH = MH_Agg_long %>% filter(Demog != "Runaway") %>% filter(Demog != "Dead") %>% 
+  filter(OccuSpecInclude != "DemogExcl" & Demog != "FemaleNoble") %>%
+  group_by(AggZone, Suffix2) %>% summarise(TotalHH = sum(Count)) %>% ungroup() %>% 
+  group_by(AggZone) %>% mutate(Totals = max(TotalHH)) %>% ungroup() %>% 
+  mutate(PctTotalHH = TotalHH / Totals) 
+
+PctTotalHH <- TotalHH %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "PctTotalHH_", values_from = PctTotalHH, values_fill = 0) %>% 
+  select(-PctTotalHH_T)
+
+TotalHH <- TotalHH %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "TotalHH_", values_from = TotalHH, values_fill = 0) %>% 
+  left_join(PctTotalHH, by = "AggZone")
+
+rm(PctTotalHH)
+
+## Attached/Dependent Female Nobles
+
+NobleAttachedFem = MH_Agg_long %>% filter(OccuSpecIncl == "DemogExcl" & Demog == "FemaleNoble") %>% 
+  group_by(AggZone) %>% summarise(NobleAttachedFem = sum(Count))
+
+## Commoner Households
+
+CommonHH = MH_Agg_long %>% filter(Class == "Commoner") %>% filter(Demog != "Runaway") %>% filter(Demog != "Dead") %>% 
+  group_by(AggZone, Suffix2) %>% summarise(CommonHH = sum(Count)) %>% ungroup() %>% 
+  group_by(AggZone) %>% mutate(Totals = max(CommonHH)) %>% ungroup() %>% 
+  mutate(PctCommonHH = CommonHH / Totals) 
+
+PctCommonHH <- CommonHH %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "PctCommonHH_", values_from = PctCommonHH, values_fill = 0) %>% 
+  select(-PctCommonHH_T)
+
+CommonHH <- CommonHH %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "CommonHH_", values_from = CommonHH, values_fill = 0) %>% 
+  left_join(PctCommonHH, by = "AggZone")
+
+rm(PctCommonHH)
+
+## Recent Runaway heads of household
+
+RunawayHH = MH_Agg_long %>% filter(Demog == "Runaway") %>% 
+   group_by(AggZone) %>% summarise(RunawayHH = sum(Count))
+
+## Recently Dead heads of household
+
+DeadHH = MH_Agg_long %>% filter(Demog == "Dead") %>% 
+   group_by(AggZone) %>% summarise(DeadHH = sum(Count))
+
+## Tributary Households
+
+TribHH = MH_Agg_long %>% filter(Trib == "Tributary") %>% 
+  group_by(AggZone, Suffix2) %>% summarise(TribHH = sum(Count)) %>% ungroup() %>% 
+  group_by(AggZone) %>% mutate(Totals = max(TribHH)) %>% ungroup() %>% 
+  mutate(PctTribHH = TribHH / Totals) 
+
+PctTribHH <- TribHH %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "PctTribHH_", values_from = PctTribHH, values_fill = 0) %>% 
+  select(-PctTribHH_T)
+
+TribHH <- TribHH %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "TribHH_", values_from = TribHH, values_fill = 0) %>% 
+  left_join(PctTribHH, by = "AggZone")
+
+rm(PctTribHH)
+
+## Exempt (Non-Tributary) Commoner Households
+
+ExemptHH = MH_Agg_long %>% filter(Trib == "Exempt") %>% 
+  group_by(AggZone, Suffix2) %>% summarise(ExemptHH = sum(Count)) %>% ungroup() %>% 
+  group_by(AggZone) %>% mutate(Totals = max(ExemptHH)) %>% ungroup() %>% 
+  mutate(PctExemptHH = ExemptHH / Totals) 
+
+PctExemptHH <- ExemptHH %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "PctExemptHH_", values_from = PctExemptHH, values_fill = 0) %>% 
+  select(-PctExemptHH_T)
+
+ExemptHH <- ExemptHH %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "ExemptHH_", values_from = ExemptHH, values_fill = 0) %>% 
+  left_join(PctExemptHH, by = "AggZone")
+
+rm(PctExemptHH)
+
+## Married Elderly/Older Men (Non-Tributary) Commoner Households
+
+OldHH = MH_Agg_long %>% filter(Demog == "Elderly") %>% 
+  group_by(AggZone, Suffix2) %>% summarise(OldHH = sum(Count)) %>% ungroup() %>% 
+  group_by(AggZone) %>% mutate(Totals = max(OldHH)) %>% ungroup() %>% 
+  mutate(PctOldHH = OldHH / Totals) 
+
+PctOldHH <- OldHH %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "PctOldHH_", values_from = PctOldHH, values_fill = 0) %>% 
+  select(-PctOldHH_T)
+
+OldHH <- OldHH %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "OldHH_", values_from = OldHH, values_fill = 0) %>% 
+  left_join(PctOldHH, by = "AggZone")
+
+rm(PctOldHH)
+
+## Widower (Non-Tributary) Commoner Households
+
+WidowerHH = MH_Agg_long %>% filter(Demog == "Widower") %>% 
+  group_by(AggZone, Suffix2) %>% summarise(WidowerHH = sum(Count)) %>% ungroup() %>% 
+  group_by(AggZone) %>% mutate(Totals = max(WidowerHH)) %>% ungroup() %>% 
+  mutate(PctWidowerHH = WidowerHH / Totals) 
+
+PctWidowerHH <- WidowerHH %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "PctWidowerHH_", values_from = PctWidowerHH, values_fill = 0) %>% 
+  select(-PctWidowerHH_T)
+
+WidowerHH <- WidowerHH %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "WidowerHH_", values_from = WidowerHH, values_fill = 0) %>% 
+  left_join(PctWidowerHH, by = "AggZone")
+
+rm(PctWidowerHH)
+
+## Widow (Non-Tributary) Commoner Heads of Household
+
+WidowHH = MH_Agg_long %>% filter(Demog == "Widow") %>% 
+  group_by(AggZone, Suffix2) %>% summarise(WidowHH = sum(Count)) %>% ungroup() %>% 
+  group_by(AggZone) %>% mutate(Totals = max(WidowHH)) %>% ungroup() %>% 
+  mutate(PctWidowHH = WidowHH / Totals) %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "WidowHH_", values_from = WidowHH, values_fill = 0)
+
+## Sick/Infirm/Disabled (Non-Tributary) Commoner Heads of Household
+
+SickHH = MH_Agg_long %>% filter(Demog == "Sick") %>% 
+  group_by(AggZone, Suffix2) %>% summarise(SickHH = sum(Count)) %>% ungroup() %>% 
+  group_by(AggZone) %>% mutate(Totals = max(SickHH)) %>% ungroup() %>% 
+  mutate(PctSickHH = SickHH / Totals) %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "SickHH_", values_from = SickHH, values_fill = 0)
+
+## Tributary Occupational Specialists
+
+TribSpecialists = MH_Agg_long %>% filter(OccuSpecInclude == 1) %>% 
+  group_by(AggZone, Suffix2) %>% summarise(TribSpecialists = sum(Count)) %>% ungroup() %>% 
+  group_by(AggZone) %>% mutate(Totals = max(TribSpecialists)) %>% ungroup() %>% 
+  mutate(PctTribSpecialists = TribSpecialists / Totals) 
+
+PctTribSpecialists <- TribSpecialists %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "PctTribSpecialists_", values_from = PctTribSpecialists, values_fill = 0) %>% 
+  select(-PctTribSpecialists_T)
+
+TribSpecialists <- TribSpecialists %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "TribSpecialists_", values_from = TribSpecialists, values_fill = 0) %>% 
+  left_join(PctTribSpecialists, by = "AggZone")
+
+rm(PctTribSpecialists)
+
+## Tributary + Elderly Occupational Specialists
+
+SpecialistsO = MH_Agg_long %>% filter(OccuSpecInclude_O == 1) %>% 
+  group_by(AggZone, Suffix2) %>% summarise(SpecialistsO = sum(Count)) %>% ungroup() %>% 
+  group_by(AggZone) %>% mutate(Totals = max(SpecialistsO)) %>% ungroup() %>% 
+  mutate(PctSpecialistsO = SpecialistsO / Totals) 
+
+PctSpecialistsO <- SpecialistsO %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "PctSpecialistsO_", values_from = PctSpecialistsO, values_fill = 0) %>% 
+  select(-PctSpecialistsO_T)
+
+SpecialistsO <- SpecialistsO %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "SpecialistsO_", values_from = SpecialistsO, values_fill = 0) %>% 
+  left_join(PctSpecialistsO, by = "AggZone")
+
+rm(PctSpecialistsO)
+
+## Tributary + Noble Occupational Specialists
+
+SpecialistsN = MH_Agg_long %>% filter(OccuSpecInclude_N == 1) %>% 
+  group_by(AggZone, Suffix2) %>% summarise(SpecialistsN = sum(Count)) %>% ungroup() %>% 
+  group_by(AggZone) %>% mutate(Totals = max(SpecialistsN)) %>% ungroup() %>% 
+  mutate(PctSpecialistsN = SpecialistsN / Totals) 
+
+PctSpecialistsN <- SpecialistsN %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "PctSpecialistsN_", values_from = PctSpecialistsN, values_fill = 0) %>% 
+  select(-PctSpecialistsN_T)
+
+SpecialistsN <- SpecialistsN %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "SpecialistsN_", values_from = SpecialistsN, values_fill = 0) %>% 
+  left_join(PctSpecialistsN, by = "AggZone")
+
+rm(PctSpecialistsN)
+
+## Tributary Occupational Specialists + Farmers 
+
+SpecialistsF = MH_Agg_long %>% filter(OccuSpecInclude_F == 1) %>% 
+  group_by(AggZone, Suffix2) %>% summarise(SpecialistsF = sum(Count)) %>% ungroup() %>% 
+  group_by(AggZone) %>% mutate(Totals = max(SpecialistsF)) %>% ungroup() %>% 
+  mutate(PctSpecialistsF = SpecialistsF / Totals) 
+
+PctSpecialistsF <- SpecialistsF %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "PctSpecialistsF_", values_from = PctSpecialistsF, values_fill = 0) %>% 
+  select(-PctSpecialistsF_T)
+
+SpecialistsF <- SpecialistsF %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "SpecialistsF_", values_from = SpecialistsF, values_fill = 0) %>% 
+  left_join(PctSpecialistsF, by = "AggZone")
+
+rm(PctSpecialistsF)
+
+## Tributary Occupational Specialists + Elderly + Nobles 
+
+SpecialistsNO = MH_Agg_long %>% filter(OccuSpecInclude_NO == 1) %>% 
+  group_by(AggZone, Suffix2) %>% summarise(SpecialistsNO = sum(Count)) %>% ungroup() %>% 
+  group_by(AggZone) %>% mutate(Totals = max(SpecialistsNO)) %>% ungroup() %>% 
+  mutate(PctSpecialistsNO = SpecialistsNO / Totals) 
+
+PctSpecialistsNO <- SpecialistsNO %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "PctSpecialistsNO_", values_from = PctSpecialistsNO, values_fill = 0) %>% 
+  select(-PctSpecialistsNO_T)
+
+SpecialistsNO <- SpecialistsNO %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "SpecialistsNO_", values_from = SpecialistsNO, values_fill = 0) %>% 
+  left_join(PctSpecialistsNO, by = "AggZone")
+
+rm(PctSpecialistsNO)
+
+## Tributary Occupational Specialists + Elderly + Farmers 
+
+SpecialistsFO = MH_Agg_long %>% filter(OccuSpecInclude_FO == 1) %>% 
+  group_by(AggZone, Suffix2) %>% summarise(SpecialistsFO = sum(Count)) %>% ungroup() %>% 
+  group_by(AggZone) %>% mutate(Totals = max(SpecialistsFO)) %>% ungroup() %>% 
+  mutate(PctSpecialistsFO = SpecialistsFO / Totals) 
+
+PctSpecialistsFO <- SpecialistsFO %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "PctSpecialistsFO_", values_from = PctSpecialistsFO, values_fill = 0) %>% 
+  select(-PctSpecialistsFO_T)
+
+SpecialistsFO <- SpecialistsFO %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "SpecialistsFO_", values_from = SpecialistsFO, values_fill = 0) %>% 
+  left_join(PctSpecialistsFO, by = "AggZone")
+
+rm(PctSpecialistsFO)
+
+## Tributary Occupational Specialists + Elderly + Farmers 
+
+SpecialistsNF = MH_Agg_long %>% filter(OccuSpecInclude_NF == 1) %>% 
+  group_by(AggZone, Suffix2) %>% summarise(SpecialistsNF = sum(Count)) %>% ungroup() %>% 
+  group_by(AggZone) %>% mutate(Totals = max(SpecialistsNF)) %>% ungroup() %>% 
+  mutate(PctSpecialistsNF = SpecialistsNF / Totals) 
+
+PctSpecialistsNF <- SpecialistsNF %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "PctSpecialistsNF_", values_from = PctSpecialistsNF, values_fill = 0) %>% 
+  select(-PctSpecialistsNF_T)
+
+SpecialistsNF <- SpecialistsNF %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "SpecialistsNF_", values_from = SpecialistsNF, values_fill = 0) %>% 
+  left_join(PctSpecialistsNF, by = "AggZone")
+
+rm(PctSpecialistsNF)
+
+## Tributary Occupational Specialists + Elderly + Farmers + Nobles
+
+SpecialistsNFO = MH_Agg_long %>% filter(OccuSpecInclude_NFO == 1) %>% 
+  group_by(AggZone, Suffix2) %>% summarise(SpecialistsNFO = sum(Count)) %>% ungroup() %>% 
+  group_by(AggZone) %>% mutate(Totals = max(SpecialistsNFO)) %>% ungroup() %>% 
+  mutate(PctSpecialistsNFO = SpecialistsNFO / Totals) 
+
+PctSpecialistsNFO <- SpecialistsNFO %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "PctSpecialistsNFO_", values_from = PctSpecialistsNFO, values_fill = 0) %>% 
+  select(-PctSpecialistsNFO_T)
+
+SpecialistsNFO <- SpecialistsNFO %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "SpecialistsNFO_", values_from = SpecialistsNFO, values_fill = 0) %>% 
+  left_join(PctSpecialistsNFO, by = "AggZone")
+
+rm(PctSpecialistsNFO)
+
+## Old / Elderly Married Men (Non-Tributary) Occupational Specialists
+
+OldSpecialists = MH_Agg_long %>% filter(OccuSpecIncl == "ExemptSpec") %>% 
+  group_by(AggZone, Suffix2) %>% summarise(OldSpecialists = sum(Count)) %>% ungroup() %>% 
+  group_by(AggZone) %>% mutate(Totals = max(OldSpecialists)) %>% ungroup() %>% 
+  mutate(PctOldSpecialists = OldSpecialists / Totals) 
+
+PctOldSpecialists <- OldSpecialists %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "PctOldSpecialists_", values_from = PctOldSpecialists, values_fill = 0) 
+
+OldSpecialists <- OldSpecialists %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "OldSpecialists_", values_from = OldSpecialists, values_fill = 0) %>% 
+  left_join(PctOldSpecialists, by = "AggZone") %>% 
+  mutate(OldSpecialists_T = OldSpecialists_F + OldSpecialists_R + OldSpecialists_U)
+
+rm(PctOldSpecialists)
+
+## Tributary Farmer Households
+
+TribFarmers = MH_Agg_long %>% filter(Occupation2 == "Farmer") %>% 
+  group_by(AggZone, Suffix2) %>% summarise(TribFarmers = sum(Count)) %>% ungroup() %>% 
+  group_by(AggZone) %>% mutate(Totals = max(TribFarmers)) %>% ungroup() %>% 
+  mutate(PctTribFarmers = TribFarmers / Totals) 
+
+PctTribFarmers <- TribFarmers %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "PctTribFarmers_", values_from = PctTribFarmers, values_fill = 0) %>% 
+  select(-PctTribFarmers_T)
+
+TribFarmers <- TribFarmers %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "TribFarmers_", values_from = TribFarmers, values_fill = 0) %>% 
+  left_join(PctTribFarmers, by = "AggZone")
+
+rm(PctTribFarmers)
+
+## Exempt / Non-Tributary Farmer Households
+
+ExemptFarmers = MH_Agg_long %>% filter(Occupation == "Farmer" & Trib == "Exempt") %>% 
+  group_by(AggZone, Suffix2) %>% summarise(ExemptFarmers = sum(Count)) %>% ungroup() %>% 
+  group_by(AggZone) %>% mutate(Totals = max(ExemptFarmers)) %>% ungroup() %>% 
+  mutate(PctExemptFarmers = ExemptFarmers / Totals) 
+
+PctExemptFarmers <- ExemptFarmers %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "PctExemptFarmers_", values_from = PctExemptFarmers, values_fill = 0) %>% 
+  select(-PctExemptFarmers_T)
+
+ExemptFarmers <- ExemptFarmers %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "ExemptFarmers_", values_from = ExemptFarmers, values_fill = 0) %>% 
+  left_join(PctExemptFarmers, by = "AggZone")
+
+rm(PctExemptFarmers)
+
+## Total Farmer Households - including Tributaries + Exempt/Non-Tributaries
+
+TotalFarmers = MH_Agg_long %>% filter(Occupation == "Farmer") %>% 
+  group_by(AggZone, Suffix2) %>% summarise(TotalFarmers = sum(Count)) %>% ungroup() %>% 
+  group_by(AggZone) %>% mutate(Totals = max(TotalFarmers)) %>% ungroup() %>% 
+  mutate(PctTotalFarmers = TotalFarmers / Totals) 
+
+PctTotalFarmers <- TotalFarmers %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "PctTotalFarmers_", values_from = PctTotalFarmers, values_fill = 0) %>% 
+  select(-PctTotalFarmers_T)
+
+TotalFarmers <- TotalFarmers %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "TotalFarmers_", values_from = TotalFarmers, values_fill = 0) %>% 
+  left_join(PctTotalFarmers, by = "AggZone")
+
+rm(PctTotalFarmers)
+
+## Total Farmer Households - including Tributaries + Exempt/Non-Tributaries + Widows
+
+TotalFarmersW = MH_Agg_long %>% filter(Occupation == "Farmer" | Occupation == "Widow") %>% 
+  group_by(AggZone, Suffix2) %>% summarise(TotalFarmersW = sum(Count)) %>% ungroup() %>% 
+  group_by(AggZone) %>% mutate(Totals = max(TotalFarmersW)) %>% ungroup() %>% 
+  mutate(PctTotalFarmersW = TotalFarmersW / Totals) 
+
+PctTotalFarmersW <- TotalFarmersW %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "PctTotalFarmersW_", values_from = PctTotalFarmersW, values_fill = 0) %>% 
+  select(-PctTotalFarmersW_T)
+
+TotalFarmersW <- TotalFarmersW %>% pivot_wider(id_cols = AggZone, names_from = Suffix2,
+  names_prefix = "TotalFarmersW_", values_from = TotalFarmersW, values_fill = 0) %>% 
+  left_join(PctTotalFarmersW, by = "AggZone")
+
+rm(PctTotalFarmersW)
+
+
+```
+
+
+```{r}
+x = TotalCount %>% left_join(TotalHH, by = "AggZone") %>% left_join(NobleAttachedFem, by = "AggZone") %>%
+  left_join(CommonHH, by = "AggZone") %>% left_join(RunawayHH, by = "AggZone") %>% 
+  left_join(DeadHH, by = "AggZone") %>% left_join(TribHH, by = "AggZone") %>% 
+  left_join(ExemptHH, by = "AggZone") %>% left_join(OldHH, by = "AggZone") %>% 
+  left_join(WidowerHH, by = "AggZone") %>% left_join(WidowHH, by = "AggZone") %>%
+  left_join(SickHH, by = "AggZone") %>% left_join(TribSpecialists, by = "AggZone") %>%
+  left_join(SpecialistsO, by = "AggZone") %>% left_join(SpecialistsN, by = "AggZone") %>%
+  left_join(SpecialistsF, by = "AggZone") %>% left_join(SpecialistsNO, by = "AggZone") %>%
+  left_join(SpecialistsFO, by = "AggZone") %>% left_join(SpecialistsNF, by = "AggZone") %>%
+  left_join(SpecialistsNFO, by = "AggZone") %>% left_join(OldSpecialists, by = "AggZone") %>%
+  left_join(TribFarmers, by = "AggZone") %>% left_join(ExemptFarmers, by = "AggZone") %>%
+  left_join(TotalFarmers, by = "AggZone") %>% left_join(TotalFarmersW, by = "AggZone")
+  
+x[is.na(x)] <- 0
+MH_Agg_Occu <- MH_Agg %>% select(AggZone_ID:AggZone, OldFarm_T:CantSeeIfOccu_U)
+MH_Agg <- MH_Agg %>% select(AggZone_ID:CircleRenters) %>% left_join(x, by = "AggZone") 
+```
+
+```{r}
+rm(x, TotalCount, TotalHH, NobleAttachedFem, CommonHH, RunawayHH, DeadHH, TribHH,
+ExemptHH, OldHH, WidowerHH, WidowHH, SickHH, TribSpecialists, SpecialistsO,
+SpecialistsN, SpecialistsF, SpecialistsNO, SpecialistsFO, SpecialistsNF,
+SpecialistsNFO, OldSpecialists, TribFarmers, ExemptFarmers, TotalFarmers, TotalFarmersW)
+```
+
+
+
+
+# Calculate Status Percentages for Occupations
+
+```{r}
+
+AggOccuPercents = MH_Agg_Occu %>% select(AggZone, FieldHand_T:CantSeeIfOccu_U) %>%
+  pivot_longer(cols = FieldHand_T:CantSeeIfOccu_U, names_to = "Variable", values_to = "Count") %>%
+  #filter(Count != 0) %>% 
+  left_join(MH_Attr, by="Variable") %>%
+  group_by(AggZone, Occupation2) %>% 
+  mutate(CountTotal = max(Count)) %>% ungroup() %>%  
+  mutate(PctTotal = Count / CountTotal) %>% 
+  filter(Status == "Renter" | Status == "Free" | Status == "Uncertain") %>%
+  select(AggZone, Variable, PctTotal) %>% mutate_all(~replace(., is.na(.), 0)) %>%
+  pivot_wider(id_cols = AggZone, names_from = Variable, names_prefix = "Pct", 
+              values_from = PctTotal)
+  
+```
+
+
+# 
+
+
+# Calculate Sector Counts and Percentages
+
+
+
+This new code works perfectly, but the MH_Attr dataframe has:
+--Primary sector includes Old, widowers, widows
+--nobles are included in Tertiary/Quaternary
+--etc.
+
+Perhaps 4 versions for each sector?
+-nobles
+-exempt
+-nobles + exempt
+-tributaries only (this DOES include farmers)
+
+Jettison 3b and 4b? 4? 4 = Quaternart; 3b + 4b = PriSec, SecTert, etc.
+--perhaps just get rid of 4 + 4b -- these are not very standard in economics or econ hist
+--keep 3b
+--keep subsector + industry
+--NEED TO CREATE A NEW SECTOR CATEGORY THAT CONFORMS TO EMPIRICAL PATTERNS
+    Spatial distribution, renters, part-time/low-intensity vs. higher-intersity/higher-specialization
+    in terms of labor time, capital inputs, scale of production (i.e. single household? or need wider organization
+    and dependent on wider division of labor FOR PRODUCTION of the good or service e.g. stoneworkers, featherworkers, etc.)
+
+Also, do you want to get rid of the "Unk" (unknown) sector??
+
+```{r}
+## Sectors3
+
+Sectors3 = MH_Agg_long %>% group_by(AggZone, Sectors3, Suffix2) %>%
+  summarise(TotalCount = sum(Count)) %>% ungroup() %>% 
+  group_by(AggZone, Sectors3) %>% mutate(Totals = max(TotalCount)) %>% ungroup() %>% 
+  mutate(PctTotalCount = TotalCount / Totals) %>% filter(!is.na(Sectors3)) 
+
+PctSectors3 <- Sectors3 %>% mutate(x = paste(Sectors3,"_",Suffix2)) %>% 
+  filter(Suffix2 != "T") %>% select(-TotalCount, -Totals, -Sectors3, -Suffix2) %>% 
+  pivot_wider(id_cols = AggZone, names_from = x, names_prefix = "PctSectors3_", 
+  values_from = PctTotalCount)
+
+Sectors3 <- Sectors3 %>% mutate(x = paste(Sectors3,"_",Suffix2)) %>% 
+  select(-Sectors3, -Suffix2) %>% pivot_wider(id_cols = AggZone, names_from = x,
+  names_prefix = "Sectors3_", values_from = TotalCount, values_fill = 0) %>% 
+  left_join(PctSectors3, by = "AggZone")
+
+rm(PctSectors3)
+```
+
+
+
+
+
+```{r}
+
+
+
+
+Sect3_Tot = MH_Occu_long_NoTotals %>% group_by(Name, Sectors3) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Sectors3)) %>% pivot_wider(id_cols=Name, names_from = Sectors3, names_prefix = "Sect3_Tot_", values_from = Count, values_fill = 0)
+
+Sect3_Tot_NoPix = MH_Occu_long_NoTotals %>% filter(Occupation != "CenPix") %>% filter(Occupation != "MacPix") %>% group_by(Name, Sectors3) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Sectors3)) %>% pivot_wider(id_cols=Name, names_from = Sectors3, names_prefix = "Sect3_Tot_NoPix_", values_from = Count, values_fill = 0)
+
+Sect3_Trib = MH_Occu_long_NoTotals %>% filter(Trib == "Tributary") %>% group_by(Name, Sectors3) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Sectors3)) %>% pivot_wider(id_cols=Name, names_from = Sectors3, names_prefix = "Sect3_Trib_", values_from = Count, values_fill = 0)
+
+Sect3_Trib_NoPix = MH_Occu_long_NoTotals %>% filter(Trib == "Tributary") %>% filter(Occupation != "CenPix") %>% filter(Occupation != "MacPix") %>% group_by(Name, Sectors3) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Sectors3)) %>% pivot_wider(id_cols=Name, names_from = Sectors3, names_prefix = "Sect3_Trib_NoPix_", values_from = Count, values_fill = 0)
+
+## Counts for Sectors4
+
+Sect4_Tot = MH_Occu_long_NoTotals %>% group_by(Name, Sectors4) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Sectors4)) %>% pivot_wider(id_cols=Name, names_from = Sectors4, names_prefix = "Sect4_Tot_", values_from = Count, values_fill = 0)
+
+Sect4_Tot_NoPix = MH_Occu_long_NoTotals %>% filter(Occupation != "CenPix") %>% filter(Occupation != "MacPix") %>% group_by(Name, Sectors4) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Sectors4)) %>% pivot_wider(id_cols=Name, names_from = Sectors4, names_prefix = "Sect4_Tot_NoPix_", values_from = Count, values_fill = 0)
+
+Sect4_Trib = MH_Occu_long_NoTotals %>% filter(Trib == "Tributary") %>% group_by(Name, Sectors4) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Sectors4)) %>% pivot_wider(id_cols=Name, names_from = Sectors4, names_prefix = "Sect4_Trib_", values_from = Count, values_fill = 0)
+
+Sect4_Trib_NoPix = MH_Occu_long_NoTotals %>% filter(Trib == "Tributary") %>% filter(Occupation != "CenPix") %>% filter(Occupation != "MacPix") %>% group_by(Name, Sectors4) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Sectors4)) %>% pivot_wider(id_cols=Name, names_from = Sectors4, names_prefix = "Sect4_Trib_NoPix_", values_from = Count, values_fill = 0)
+
+## Counts for Sectors3b
+
+Sect3b_Tot = MH_Occu_long_NoTotals %>% group_by(Name, Sectors3b) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Sectors3b)) %>% pivot_wider(id_cols=Name, names_from = Sectors3b, names_prefix = "Sect3b_Tot_", values_from = Count, values_fill = 0)
+
+Sect3b_Tot_NoPix = MH_Occu_long_NoTotals %>% filter(Occupation != "CenPix") %>% filter(Occupation != "MacPix") %>% group_by(Name, Sectors3b) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Sectors3b)) %>% pivot_wider(id_cols=Name, names_from = Sectors3b, names_prefix = "Sect3b_Tot_NoPix_", values_from = Count, values_fill = 0)
+
+Sect3b_Trib = MH_Occu_long_NoTotals %>% filter(Trib == "Tributary") %>% group_by(Name, Sectors3b) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Sectors3b)) %>% pivot_wider(id_cols=Name, names_from = Sectors3b, names_prefix = "Sect3b_Trib_", values_from = Count, values_fill = 0)
+
+Sect3b_Trib_NoPix = MH_Occu_long_NoTotals %>% filter(Trib == "Tributary") %>% filter(Occupation != "CenPix") %>% filter(Occupation != "MacPix") %>% group_by(Name, Sectors3b) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Sectors3b)) %>% pivot_wider(id_cols=Name, names_from = Sectors3b, names_prefix = "Sect3b_Trib_NoPix_", values_from = Count, values_fill = 0)
+
+## Counts for Sectors4b
+
+Sect4b_Tot = MH_Occu_long_NoTotals %>% group_by(Name, Sectors4b) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Sectors4b)) %>% pivot_wider(id_cols=Name, names_from = Sectors4b, names_prefix = "Sect4b_Tot_", values_from = Count, values_fill = 0)
+
+Sect4b_Tot_NoPix = MH_Occu_long_NoTotals %>% filter(Occupation != "CenPix") %>% filter(Occupation != "MacPix") %>% group_by(Name, Sectors4b) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Sectors4b)) %>% pivot_wider(id_cols=Name, names_from = Sectors4b, names_prefix = "Sect4b_Tot_NoPix_", values_from = Count, values_fill = 0)
+
+Sect4b_Trib = MH_Occu_long_NoTotals %>% filter(Trib == "Tributary") %>% group_by(Name, Sectors4b) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Sectors4b)) %>% pivot_wider(id_cols=Name, names_from = Sectors4b, names_prefix = "Sect4b_Trib_", values_from = Count, values_fill = 0)
+
+Sect4b_Trib_NoPix = MH_Occu_long_NoTotals %>% filter(Trib == "Tributary") %>% filter(Occupation != "CenPix") %>% filter(Occupation != "MacPix") %>% group_by(Name, Sectors4b) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Sectors4b)) %>% pivot_wider(id_cols=Name, names_from = Sectors4b, names_prefix = "Sect4b_Trib_NoPix_", values_from = Count, values_fill = 0)
+
+## Counts for Subsectors
+
+SubSect_Tot = MH_Occu_long_NoTotals %>% group_by(Name, Subsector) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Subsector)) %>% pivot_wider(id_cols=Name, names_from = Subsector, names_prefix = "SubSect_Tot_", values_from = Count, values_fill = 0)
+
+SubSect_Tot_NoPix = MH_Occu_long_NoTotals %>% filter(Occupation != "CenPix") %>% filter(Occupation != "MacPix") %>% group_by(Name, Subsector) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Subsector)) %>% pivot_wider(id_cols=Name, names_from = Subsector, names_prefix = "SubSect_Tot_NoPix_", values_from = Count, values_fill = 0)
+
+SubSect_Trib = MH_Occu_long_NoTotals %>% filter(Trib == "Tributary") %>% group_by(Name, Subsector) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Subsector)) %>% pivot_wider(id_cols=Name, names_from = Subsector, names_prefix = "SubSect_Trib_", values_from = Count, values_fill = 0)
+
+SubSect_Trib_NoPix = MH_Occu_long_NoTotals %>% filter(Trib == "Tributary") %>% filter(Occupation != "CenPix") %>% filter(Occupation != "MacPix") %>% group_by(Name, Subsector) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Subsector)) %>% pivot_wider(id_cols=Name, names_from = Subsector, names_prefix = "SubSect_Trib_NoPix_", values_from = Count, values_fill = 0)
+
+## Counts for Industries
+
+Industry_Tot = MH_Occu_long_NoTotals %>% group_by(Name, Industry) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Industry)) %>% pivot_wider(id_cols=Name, names_from = Industry, names_prefix = "Industry_Tot_", values_from = Count, values_fill = 0)
+
+Industry_Tot_NoPix = MH_Occu_long_NoTotals %>% filter(Occupation != "CenPix") %>% filter(Occupation != "MacPix") %>% group_by(Name, Industry) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Industry)) %>% pivot_wider(id_cols=Name, names_from = Industry, names_prefix = "Industry_Tot_NoPix_", values_from = Count, values_fill = 0)
+
+Industry_Trib = MH_Occu_long_NoTotals %>% filter(Trib == "Tributary") %>% group_by(Name, Industry) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Industry)) %>% pivot_wider(id_cols=Name, names_from = Industry, names_prefix = "Industry_Trib_", values_from = Count, values_fill = 0)
+
+Industry_Trib_NoPix = MH_Occu_long_NoTotals %>% filter(Trib == "Tributary") %>% filter(Occupation != "CenPix") %>% filter(Occupation != "MacPix") %>% group_by(Name, Industry) %>% summarise(Count = sum(Count)) %>% ungroup() %>% filter(!is.na(Industry)) %>% pivot_wider(id_cols=Name, names_from = Industry, names_prefix = "Industry_Trib_NoPix_", values_from = Count, values_fill = 0)
+
+
+```
+
+
+
+
+
+
+
+# Overall Occupation Numbers, Ubiquity, Concentration and Dispersion
+
+--include nobles
+--do this for North, Central, South regions
+
+Table:
+-number of HH employed in occupation
+-% of the total occupation employment in each of 3-4 regions (surroundings?)
+-% renters of each occupation by region (3-4) and total
+-Gini index as metric of occupational spatial concentration by region and for total
+
+
+```{r}
+
+AggZones = MH_Settlements %>% select(AggZone_ID, AggZone, ORD, Name)
+
+#MH_Agg_Occu = AggZones %>% left_join(MH_Occu, by = c("ORD", "Name")) %>% select(-ORD, -Name) %>% group_by(AggZone_ID, AggZone) %>% summarise_if(is.numeric, sum) %>% ungroup 
+
+MH_Agg_Occu_Long = MH_Agg_Occu %>% pivot_longer(cols = OldFarm_T:CantSeeIfOccu_U,
+  names_to = "Variable", values_to = "Count") %>% filter(Count != 0) %>% 
+  left_join(MH_Attr, by="Variable") 
+
+MH_Agg_Occu_Long = MH_Agg_Occu_Long %>% mutate(presence = ifelse(Count > 0, 1, 0)) %>% 
+  group_by(Variable) %>% mutate(occ.specialists = sum(Count, na.rm = T), 
+                                ubiquity = sum(presence, na.rm = T)) %>% ungroup 
+
+y = MH_Agg_Occu_Long %>% group_by(Variable, occ.specialists, ubiquity) %>% 
+  summarise() %>% ungroup() %>% rename(Ubiquity_Agg = ubiquity)
+  
+MH_Occu_Long2 = MH_Occu_long %>% left_join(AggZones, by = c("ORD", "Name")) %>% 
+  mutate(presence = ifelse(Count > 0, 1, 0)) %>% group_by(Variable) %>% 
+  mutate(occ.specialists = sum(Count, na.rm = T), 
+         ubiquity = sum(presence, na.rm = T)) %>% ungroup 
+
+z = MH_Occu_Long2 %>% group_by(Variable, occ.specialists, ubiquity) %>% 
+  summarise() %>% ungroup() %>% rename(Ubiquity_Barrios = ubiquity)
+
+x = y %>% full_join(z, by = c("Variable", "occ.specialists"))
+
+MH_Attr2 = MH_Attr %>% left_join(x, by = "Variable") %>% 
+  rename(TotalCountOccu = occ.specialists) %>%
+  mutate(TotalCountOccu = coalesce(TotalCountOccu, 0),
+         Ubiquity_Agg = coalesce(Ubiquity_Agg, 0),
+         Ubiquity_Barrios = coalesce(Ubiquity_Barrios, 0))
+
+y = disp(MH_Agg_Occu[c(3:277)])
+y = as.data.frame(t(as.matrix(y))) 
+y = y %>% select(-Theil, -Dalton)
+colnames(y) <- paste(colnames(y), "Agg", sep = "_")
+y$Variable = rownames(y)
+
+x = disp(MH_Occu[c(3:277)])
+x = as.data.frame(t(as.matrix(x))) 
+x = x %>% select(-Theil, -Dalton)
+colnames(x) <- paste(colnames(x), "Bar", sep = "_")
+x$Variable = rownames(x)
+
+z = x %>% left_join(y, by="Variable")
+names(z) <- c("Gini_Bar", "GiniNorm_Bar", "HHI_Bar", "HHINorm_Bar", "HHIeq_Bar", "HooverNon-Wt_Bar", "CoulterNon-Wt_Bar", "Atkinson_Bar", "SD_Bar", "CV_Bar", "CVNorm_Bar", "Variable", "Gini_Agg", "GiniNorm_Agg", "HHI_Agg", "HHINorm_Agg", "HHIeq_Agg", "HooverNon-Wt_Agg", "CoulterNon-Wt_Agg","Atkinson_Agg", "SD_Agg", "CV_Agg", "CVNprm_Agg")
+MH_Attr2 = MH_Attr2 %>% left_join(z, by = "Variable")
+
+MH_Attr2 = MH_Attr2 %>% select(-GiniNorm_Bar, -HHINorm_Bar, -GiniNorm_Agg, -HHINorm_Agg, -CV_Bar, -CV_Agg)
+
+PctRenter = MH_Attr2 %>% group_by(Occupation2) %>% mutate(OccuTotal = max(TotalCountOccu)) %>% 
+  ungroup() %>% mutate(PctRenter = TotalCountOccu / OccuTotal) %>% filter(Status == "Renter") %>% 
+  select(Occupation2, PctRenter, TotalCountOccu) %>% rename(Renter = TotalCountOccu) %>% 
+  group_by(Occupation2) %>% summarise_all(sum)
+  
+PctFree = MH_Attr2 %>% group_by(Occupation2) %>% mutate(OccuTotal = max(TotalCountOccu)) %>% 
+  ungroup() %>% mutate(PctFree = TotalCountOccu / OccuTotal) %>% filter(Status == "Free") %>% 
+  select(Occupation2, PctFree, TotalCountOccu) %>% rename(Free = TotalCountOccu) %>% 
+  group_by(Occupation2) %>% summarise_all(sum)
+
+x = PctRenter %>% left_join(PctFree, by="Occupation2") %>% mutate(RF_Ratio = Renter / Free,
+                                                                  FR_Ratio = Free / Renter)
+
+tot = MH_Attr2 %>% filter(Status == "Total") %>% left_join(x, by="Occupation2") %>% 
+  filter(OccuSpecInclude == 1) #%>% select(-Class:ExemptSpecialists, -English:Nahuatl)
+
+write.csv(tot, paste0(wd$data_p,"MH_Attr2.csv"))
+
+rm(x,y,z,tot)
+
+```
+
+
+
+
+# Balassa/LQ for Occupations and Sectors
+
+--It's BAlassa, NOT BElassa!!!!
+
+--Balassa_pop == Balassa!! Total employment == total households or total tributaries
+--Total Employment == economically active population
+--Total Employment =/= Total specialists! Farmers are employed in farming!!
+
+Calculate = 
+--Balassa
+
+--Additive Balassa = Hoen and Oosterhaven
+-- regional specialisation coefficient  = Hoen and Oosterhaven
+
+--  A modification of the Gini coefficient is used for the spatial concentration of industries as well as regional specialization (e.g. Ceapraz 2008). As we can see in the calculation of Ri and Cj, respectively, the spatial Gini coefficient is based on the LQ.
+
+--Cluster Index by Litzenberger and Sternberg --> needs number of FIRMS
+----FIRMS == groupings of specialists 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
